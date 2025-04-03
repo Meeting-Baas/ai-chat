@@ -1,167 +1,89 @@
-import {
-  UIMessage,
-  appendResponseMessages,
-  createDataStreamResponse,
-  smoothStream,
-  streamText,
-} from 'ai';
 import { auth } from '@/server/auth';
-import { systemPrompt } from '@/lib/ai/prompts';
 import {
   deleteChatById,
-  getChatById,
-  saveChat,
-  saveMessages,
+  getChatById
 } from '@/server/db/queries';
+import { openai } from '@ai-sdk/openai';
 import {
-  generateUUID,
-  getMostRecentUserMessage,
-  getTrailingMessageId,
-} from '@/lib/utils';
-import { generateTitleFromUserMessage } from '../../actions';
-import { createDocument } from '@/lib/ai/tools/create-document';
-import { updateDocument } from '@/lib/ai/tools/update-document';
-import { requestSuggestions } from '@/lib/ai/tools/request-suggestions';
-import { getWeather } from '@/lib/ai/tools/get-weather';
-import { isProductionEnvironment } from '@/lib/constants';
-import { myProvider } from '@/lib/ai/providers';
+  experimental_createMCPClient as createMCPClient,
+  InvalidToolArgumentsError,
+  NoSuchToolError,
+  smoothStream,
+  streamText,
+  ToolExecutionError
+} from 'ai';
+import { NextRequest } from 'next/server';
+
+const MCP_SYSTEM_PROMPT = 'You are a friendly assistant. Do not use emojis in your responses. Make sure to format code blocks, and add language/title to it. When an information is provided, if possible, try to store it for future reference.';
 
 export const maxDuration = 60;
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
-    const {
-      id,
-      messages,
-      selectedChatModel,
-    }: {
-      id: string;
-      messages: Array<UIMessage>;
-      selectedChatModel: string;
-    } = await request.json();
-
-    const session = await auth();
-
-    if (!session || !session.user || !session.user.id) {
-      return new Response('Unauthorized', { status: 401 });
+    const { messages, apiKey } = await request.json();
+    
+    // We expect the client to send the apiKey from localStorage
+    // This matches how sidebar-user-nav.tsx stores the key: localStorage.setItem('meetingbaas_api_key', key);
+    if (!apiKey) {
+      return Response.json({ error: 'API key is required' }, { status: 400 });
     }
 
-    const userMessage = getMostRecentUserMessage(messages);
-
-    if (!userMessage) {
-      return new Response('No user message found', { status: 400 });
-    }
-
-    const chat = await getChatById({ id });
-
-    if (!chat) {
-      const title = await generateTitleFromUserMessage({
-        message: userMessage,
-      });
-
-      await saveChat({ id, userId: session.user.id, title });
-    } else {
-      if (chat.userId !== session.user.id) {
-        return new Response('Unauthorized', { status: 401 });
-      }
-    }
-
-    await saveMessages({
-      messages: [
-        {
-          chatId: id,
-          id: userMessage.id,
-          role: 'user',
-          parts: userMessage.parts,
-          attachments: userMessage.experimental_attachments ?? [],
-          createdAt: new Date(),
-        },
-      ],
+    let client = await createMCPClient({
+      transport: {
+        type: 'sse',
+        url: 'https://mcp.meetingbaas.com/sse',
+        headers: {
+          'x-meeting-baas-api-key': apiKey,
+        }
+      },
+      onUncaughtError: (error) => {
+        console.error('MCP Client error:', error);
+      },
     });
 
-    return createDataStreamResponse({
-      execute: (dataStream) => {
-        const result = streamText({
-          model: myProvider.languageModel(selectedChatModel),
-          system: systemPrompt({ selectedChatModel }),
-          messages,
-          maxSteps: 5,
-          experimental_activeTools:
-            selectedChatModel === 'chat-model-reasoning'
-              ? []
-              : [
-                  'getWeather',
-                  'createDocument',
-                  'updateDocument',
-                  'requestSuggestions',
-                ],
-          experimental_transform: smoothStream({ chunking: 'word' }),
-          experimental_generateMessageId: generateUUID,
-          tools: {
-            getWeather,
-            createDocument: createDocument({ session, dataStream }),
-            updateDocument: updateDocument({ session, dataStream }),
-            requestSuggestions: requestSuggestions({
-              session,
-              dataStream,
-            }),
-          },
-          onFinish: async ({ response }) => {
-            if (session.user?.id) {
-              try {
-                const assistantId = getTrailingMessageId({
-                  messages: response.messages.filter(
-                    (message) => message.role === 'assistant',
-                  ),
-                });
-
-                if (!assistantId) {
-                  throw new Error('No assistant message found!');
-                }
-
-                const [, assistantMessage] = appendResponseMessages({
-                  messages: [userMessage],
-                  responseMessages: response.messages,
-                });
-
-                await saveMessages({
-                  messages: [
-                    {
-                      id: assistantId,
-                      chatId: id,
-                      role: assistantMessage.role,
-                      parts: assistantMessage.parts,
-                      attachments:
-                        assistantMessage.experimental_attachments ?? [],
-                      createdAt: new Date(),
-                    },
-                  ],
-                });
-              } catch (_) {
-                console.error('Failed to save chat');
-              }
-            }
-          },
-          experimental_telemetry: {
-            isEnabled: isProductionEnvironment,
-            functionId: 'stream-text',
-          },
-        });
-
-        result.consumeStream();
-
-        result.mergeIntoDataStream(dataStream, {
-          sendReasoning: true,
-        });
+    const toolSet = await client.tools();
+    
+    // No setApiKeyTool - we rely on the client sending the key from localStorage
+    
+    const result = streamText({
+      model: openai('gpt-4o-mini'),
+      tools: toolSet, // Use all tools from MCP except setting API key
+      maxSteps: 10,
+      experimental_transform: [
+        smoothStream({
+          chunking: 'word',
+        }),
+      ],
+      onStepFinish: async ({ toolResults }) => {
+        console.log(`Step Results: ${JSON.stringify(toolResults, null, 2)}`);
       },
-      onError: () => {
-        return 'Oops, an error occured!';
+      onFinish: async () => {
+        await client.close();
+      },
+      onError: async () => {
+        await client.close();
+      },
+      system: `${MCP_SYSTEM_PROMPT} You have access to the MeetingBaaS API.`,
+      messages,
+    });
+
+    return result.toDataStreamResponse({
+      getErrorMessage: (error) => {
+        if (NoSuchToolError.isInstance(error)) {
+          return 'The model tried to call a unknown tool.';
+        } else if (InvalidToolArgumentsError.isInstance(error)) {
+          return 'The model called a tool with invalid arguments.';
+        } else if (ToolExecutionError.isInstance(error)) {
+          console.log(error);
+          return 'An error occurred during tool execution.';
+        } else {
+          return 'An unknown error occurred.';
+        }
       },
     });
   } catch (error) {
-    return new Response('An error occurred while processing your request!', {
-      status: 404,
-    });
+    console.error(error);
+    return Response.json({ error: 'Failed to generate text' });
   }
 }
 
