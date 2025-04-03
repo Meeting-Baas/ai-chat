@@ -37,7 +37,7 @@ async function getApiKey() {
       credentials: 'include',  // This is critical for sending cookies cross-domain
       headers: {
         'Content-Type': 'application/json',
-        // The auth cookie will be automatically included due to credentials: 'include'
+        'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
       }
     });
 
