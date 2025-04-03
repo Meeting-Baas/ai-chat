@@ -5,6 +5,8 @@ import type { User } from 'next-auth';
 import { signOut } from 'next-auth/react';
 import { useTheme } from 'next-themes';
 import { ThemeToggle } from "../theme-toggle";
+import { useEffect, useState } from 'react';
+import { toast } from 'sonner';
 
 import {
   DropdownMenu,
@@ -19,8 +21,44 @@ import {
   SidebarMenuItem,
 } from '@/components/ui/sidebar';
 
+// Function to fetch API key from the MeetingBaaS API
+async function getApiKey() {
+  try {
+    const response = await fetch('https://api.meetingbaas.com/accounts/api_key', {
+      method: 'GET',
+      credentials: 'include',  // Important: sends cookies with the request
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      return data.api_key;  // Return the API key
+    } else {
+      console.error('Error fetching API key:', response.statusText);
+      return null;
+    }
+  } catch (error) {
+    console.error('Error fetching API key:', error);
+    return null;
+  }
+}
+
 export function SidebarUserNav({ user }: { user: User }) {
   const { setTheme, theme } = useTheme();
+  const [apiKey, setApiKey] = useState<string | null>(null);
+
+  // Fetch API key after component mounts (after successful login)
+  useEffect(() => {
+    const fetchApiKey = async () => {
+      const key = await getApiKey();
+      if (key) {
+        setApiKey(key);
+        // Store API key in localStorage for use in other components
+        localStorage.setItem('meetingbaas_api_key', key);
+      }
+    };
+
+    fetchApiKey();
+  }, []);
 
   return (
     <SidebarMenu>
