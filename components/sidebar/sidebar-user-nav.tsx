@@ -1,4 +1,5 @@
 'use client';
+import { GitIcon } from '@/components/icons';
 import { ChevronUp } from 'lucide-react';
 import type { User } from 'next-auth';
 import { signOut } from 'next-auth/react';
@@ -31,8 +32,29 @@ async function getApiKey() {
       return null;
     }
 
-    const response = await fetch('https://api.meetingbaas.com/accounts/api_key', {
-      // const response = await fetch('http://localhost:3001/accounts/api_key', {
+    // Determine API URL based on the environment
+    let apiUrl;
+    if (typeof window !== 'undefined') {
+      // Check if we're in pre-production based on the hostname
+      const isPreprod = window.location.hostname.includes('pre-prod');
+
+      if (process.env.NODE_ENV === 'development') {
+        // Local development environment
+        apiUrl = process.env.NEXT_PUBLIC_DEV_API_URL + '/accounts/api_key';
+      } else if (isPreprod) {
+        // Pre-production environment
+        apiUrl = process.env.NEXT_PUBLIC_MEETINGBAAS_PRE_PROD_API_URL + '/accounts/api_key';
+      } else {
+        // Production environment
+        apiUrl = process.env.NEXT_PUBLIC_MEETINGBAAS_API_URL + '/accounts/api_key';
+      }
+    }
+
+    if (!apiUrl) {
+      throw new Error('API URL is not defined');
+    }
+
+    const response = await fetch(apiUrl, {
       method: 'GET',
       credentials: 'include',  // This is critical for sending cookies cross-domain
       headers: {
@@ -121,6 +143,18 @@ export function SidebarUserNav({ user }: { user: User }) {
             >
               <p>Theme</p>
               <ThemeToggle mode='light-dark-system' />
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem asChild>
+              <a
+                href="https://github.com/Meeting-Baas/ai-chat"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 w-full cursor-pointer"
+              >
+                <GitIcon />
+                <span>GitHub</span>
+              </a>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem asChild>

@@ -1,0 +1,42 @@
+{
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "Access-Control-Allow-Credentials", "value": "true" },
+        {
+          "key": "Access-Control-Allow-Origin",
+          "value": "*"
+        },
+        {
+          "key": "Access-Control-Allow-Methods",
+          "value": "GET,OPTIONS,PATCH,DELETE,POST,PUT"
+        },
+        {
+          "key": "Access-Control-Allow-Headers",
+          "value": "X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, Authorization, Authorization2, x-spoke-api-key, x-meeting-baas-api-key"
+        }
+      ]
+    }
+  ],
+  "env": {
+    "API_URL": "https://api.meetingbaas.com",
+    "PRE_PROD_API_URL": "https://api.pre-prod-meetingbaas.com"
+  },
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "https://api.meetingbaas.com/:path*"
+    },
+    {
+      "source": "/pre-prod-api/:path*",
+      "destination": "https://api.pre-prod-meetingbaas.com/:path*"
+    }
+  ],
+  "build": {
+    "env": {
+      "NEXT_PUBLIC_API_URL": "https://api.meetingbaas.com",
+      "NEXT_PUBLIC_PRE_PROD_API_URL": "https://api.pre-prod-meetingbaas.com"
+    }
+  }
+}
