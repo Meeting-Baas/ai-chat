@@ -26,18 +26,23 @@ async function getApiKey() {
   try {
     const response = await fetch('https://api.meetingbaas.com/accounts/api_key', {
       method: 'GET',
-      credentials: 'include',  // Important: sends cookies with the request
+      credentials: 'include',  // This is critical for sending cookies cross-domain
+      headers: {
+        'Content-Type': 'application/json'
+      }
     });
 
     if (response.ok) {
-      const data = await response.json();
-      return data.api_key;  // Return the API key
+      return response.json().then(data => {
+        console.log('API Key:', data.api_key);
+        return data.api_key;
+      });
     } else {
-      console.error('Error fetching API key:', response.statusText);
-      return null;
+      throw new Error(`Failed to fetch API key: ${response.status} ${response.statusText}`);
     }
   } catch (error) {
     console.error('Error fetching API key:', error);
+    toast.error('Failed to fetch API key. Please ensure you are logged in.');
     return null;
   }
 }
@@ -49,16 +54,27 @@ export function SidebarUserNav({ user }: { user: User }) {
   // Fetch API key after component mounts (after successful login)
   useEffect(() => {
     const fetchApiKey = async () => {
-      const key = await getApiKey();
-      if (key) {
-        setApiKey(key);
-        // Store API key in localStorage for use in other components
-        localStorage.setItem('meetingbaas_api_key', key);
+      try {
+        const key = await getApiKey();
+        if (key) {
+          setApiKey(key);
+          // Store API key in localStorage for use in other components
+          localStorage.setItem('meetingbaas_api_key', key);
+          toast.success('Successfully connected to MeetingBaaS');
+        } else {
+          // If key is null but no error was thrown, show a message
+          toast.warning('Could not retrieve MeetingBaaS API key');
+        }
+      } catch (error) {
+        console.error('API Key fetch error in useEffect:', error);
       }
     };
 
-    fetchApiKey();
-  }, []);
+    // Only fetch if user is authenticated
+    if (user?.email) {
+      fetchApiKey();
+    }
+  }, [user?.email]); // Re-run if user email changes
 
   return (
     <SidebarMenu>
