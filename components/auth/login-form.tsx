@@ -1,8 +1,8 @@
 'use client';
 
 import { useAction } from 'next-safe-action/hooks';
+import { useEffect } from 'react';
 
-import type { MagicLink } from '@/lib/validators';
 import { Button } from '@/components/ui/button';
 import {
   Form,
@@ -11,13 +11,14 @@ import {
   FormItem,
   FormMessage,
 } from '@/components/ui/form';
+import { Input } from '@/components/ui/input';
+import type { MagicLink } from '@/lib/validators';
+import { MagicLinkSchema } from '@/lib/validators';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
-import { Input } from '@/components/ui/input';
-import { MagicLinkSchema } from '@/lib/validators';
 
-import { TriangleAlertIcon as IconWarning } from 'lucide-react';
 import { CheckCircleFillIcon as IconCheckCircle } from '@/components/icons';
+import { TriangleAlertIcon as IconWarning } from 'lucide-react';
 import { Alert, AlertTitle } from '../ui/alert';
 
 import { loginWithMagicLink } from '@/app/(auth)/actions';
@@ -36,6 +37,15 @@ export const LoginForm = () => {
   const onSubmit = (values: MagicLink) => {
     execute(values);
   };
+
+  // Effect to store auth token when login is successful
+  useEffect(() => {
+    if (status === 'hasSucceeded') {
+      // Create a session token when login is successful
+      const tempToken = `auth_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
+      localStorage.setItem('auth_token', tempToken);
+    }
+  }, [status]);
 
   return (
     <Form {...form}>

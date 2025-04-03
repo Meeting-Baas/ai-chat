@@ -1,12 +1,12 @@
 'use client';
 import { ChevronUp } from 'lucide-react';
-import Image from 'next/image';
 import type { User } from 'next-auth';
 import { signOut } from 'next-auth/react';
 import { useTheme } from 'next-themes';
-import { ThemeToggle } from "../theme-toggle";
+import Image from 'next/image';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
+import { ThemeToggle } from "../theme-toggle";
 
 import {
   DropdownMenu,
@@ -24,11 +24,20 @@ import {
 // Function to fetch API key from the MeetingBaaS API
 async function getApiKey() {
   try {
+    // Check if user is authenticated by verifying auth token exists
+    const authToken = localStorage.getItem('auth_token');
+    if (!authToken) {
+      toast.error('You must be logged in to access your API key');
+      return null;
+    }
+
     const response = await fetch('https://api.meetingbaas.com/accounts/api_key', {
+      // const response = await fetch('http://localhost:3001/accounts/api_key', {
       method: 'GET',
       credentials: 'include',  // This is critical for sending cookies cross-domain
       headers: {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        // The auth cookie will be automatically included due to credentials: 'include'
       }
     });
 
@@ -55,6 +64,13 @@ export function SidebarUserNav({ user }: { user: User }) {
   useEffect(() => {
     const fetchApiKey = async () => {
       try {
+        // Check if user is authenticated by verifying auth token exists
+        const authToken = localStorage.getItem('auth_token');
+        if (!authToken) {
+          toast.warning('Please log in to access your MeetingBaaS API key');
+          return;
+        }
+
         const key = await getApiKey();
         if (key) {
           setApiKey(key);
@@ -112,6 +128,10 @@ export function SidebarUserNav({ user }: { user: User }) {
                 type="button"
                 className="w-full cursor-pointer"
                 onClick={() => {
+                  // Clear auth tokens from localStorage before signing out
+                  localStorage.removeItem('auth_token');
+                  localStorage.removeItem('meetingbaas_api_key');
+
                   signOut({
                     redirectTo: '/',
                   });

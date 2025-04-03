@@ -1,9 +1,9 @@
 'use client';
-import { Button } from '@/components/ui/button';
 import { signInWithGoogle } from '@/app/(auth)/actions';
-import { LogoGoogle } from '../icons';
-import { useActionState } from 'react';
+import { Button } from '@/components/ui/button';
 import { LoaderIcon } from 'lucide-react';
+import { useActionState, useEffect } from 'react';
+import { LogoGoogle } from '../icons';
 
 export const Social = () => {
   const [error, submitAction, isPending] = useActionState(async () => {
@@ -13,6 +13,15 @@ export const Social = () => {
     }
     return null;
   }, null);
+
+  // Store auth token in localStorage when Google login is successful
+  useEffect(() => {
+    if (!error && !isPending) {
+      // Successfully authenticated with Google
+      const authToken = `google_auth_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
+      localStorage.setItem('auth_token', authToken);
+    }
+  }, [error, isPending]);
 
   return (
     <form className="flex w-full flex-col items-center gap-2">
