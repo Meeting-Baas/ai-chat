@@ -25,12 +25,12 @@
   },
   "rewrites": [
     {
-      "source": "/api/:path*",
-      "destination": "https://api.meetingbaas.com/:path*"
+      "source": "/accounts/api_key",
+      "destination": "https://api.meetingbaas.com/accounts/api_key"
     },
     {
-      "source": "/pre-prod-api/:path*",
-      "destination": "https://api.pre-prod-meetingbaas.com/:path*"
+      "source": "/pre-prod/accounts/api_key",
+      "destination": "https://api.pre-prod-meetingbaas.com/accounts/api_key"
     }
   ],
   "build": {
