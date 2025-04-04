@@ -1,10 +1,10 @@
 'use client';
 
-import { useChat } from '@ai-sdk/react';
+import { initialArtifactData, useArtifact } from '@/hooks/use-artifact';
+import { useMeetingBaasChat } from '@/lib/ai/use-meeting-baas-chat';
+import type { Suggestion } from '@/server/db/schema';
 import { useEffect, useRef } from 'react';
 import { artifactDefinitions, type ArtifactKind } from './artifact';
-import type { Suggestion } from '@/server/db/schema';
-import { initialArtifactData, useArtifact } from '@/hooks/use-artifact';
 
 export type DataStreamDelta = {
   type:
@@ -22,7 +22,13 @@ export type DataStreamDelta = {
 };
 
 export function DataStreamHandler({ id }: { id: string }) {
-  const { data: dataStream } = useChat({ id });
+  const {
+    data: dataStream,
+    messages,
+    input,
+    handleInputChange,
+    handleSubmit,
+  } = useMeetingBaasChat({ id });
   const { artifact, setArtifact, setMetadata } = useArtifact();
   const lastProcessedIndex = useRef(-1);
 
