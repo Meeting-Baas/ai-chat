@@ -20,20 +20,37 @@ export const maxDuration = 60;
 
 export async function POST(request: NextRequest) {
   try {
-    const { messages, apiKey } = await request.json();
+    // Debug the request body
+    const requestBody = await request.json();
+    console.log('Received request body:', JSON.stringify({
+      messagesCount: requestBody.messages?.length || 0,
+      apiKeyProvided: !!requestBody.apiKey,
+      apiKeyLength: requestBody.apiKey?.length || 0
+    }));
     
-    // We expect the client to send the apiKey from localStorage
-    // This matches how sidebar-user-nav.tsx stores the key: localStorage.setItem('meetingbaas_api_key', key);
+    const { messages, apiKey } = requestBody;
+    
+    // Enhanced debug for API key check
     if (!apiKey) {
+      console.error('API key missing in request');
       return Response.json({ error: 'API key is required' }, { status: 400 });
     }
-
+    
+    if (apiKey.trim() === '') {
+      console.error('API key is empty string');
+      return Response.json({ error: 'API key cannot be empty' }, { status: 400 });
+    }
+    
+    console.log('API key validation successful, length:', apiKey.length);
+    
     let client = await createMCPClient({
       transport: {
         type: 'sse',
-        url: process.env.NODE_ENV === 'production' 
-          ? (process.env.NEXT_PUBLIC_MEETINGBAAS_MCP_URL || 'https://mcp.meetingbaas.com/sse')
-          : (process.env.NEXT_PUBLIC_MEETINGBAAS_PRE_PROD_MCP_URL || 'https://mcp.pre-prod-meetingbaas.com/sse'),
+        url: process.env.NODE_ENV === 'development'
+          ? (process.env.NEXT_PUBLIC_DEV_MCP_URL || 'http://localhost:3001/sse')
+          : process.env.NODE_ENV === 'production'
+            ? (process.env.NEXT_PUBLIC_MEETINGBAAS_MCP_URL || 'https://mcp.meetingbaas.com/sse')
+            : (process.env.NEXT_PUBLIC_MEETINGBAAS_PRE_PROD_MCP_URL || 'https://mcp.pre-prod-meetingbaas.com/sse'),
         headers: {
           'x-meeting-baas-api-key': apiKey,
         }

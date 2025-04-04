@@ -1,6 +1,13 @@
 import { processChatResponse } from '@/lib/ai/process-chat-response';
 import { generateId, type Message, type ToolCall } from 'ai';
 
+// Add this at the top of the file (after your imports)
+declare global {
+  interface Window {
+    setMeetingBaasApiKey: (key: string) => void;
+  }
+}
+
 // Define the interfaces based on your context provider rather than importing from fumadocs
 export interface MessageRecord {
   role: 'user' | 'assistant';
@@ -42,28 +49,63 @@ export async function createAiSdkEngine() {
     onUpdate?: (full: string) => void,
     onEnd?: (full: string) => void,
   ) {
-    // Changed to match your sidebar-user-nav.tsx implementation
-    apiKey = localStorage.getItem('auth_token') || localStorage.getItem('meetingbaas_api_key');
+    // Safe check for localStorage
+    if (typeof window !== 'undefined') {
+      apiKey = localStorage.getItem('meetingbaas_api_key') || localStorage.getItem('auth_token');
+      console.log('API key status:', {
+        exists: !!apiKey,
+        length: apiKey?.length || 0,
+        type: typeof apiKey,
+        isEmpty: apiKey === ''
+      });
+    } else {
+      apiKey = null;
+      console.log('Window object not available (server-side rendering)');
+    }
+    
     controller = new AbortController();
 
+    // Enhanced validation for API key
+    if (!apiKey || apiKey.trim() === '') {
+      const errorMessage = 'Please set your MeetingBaaS API key first';
+      console.error('No valid API key found in localStorage');
+      if (onEnd) onEnd(errorMessage);
+      return errorMessage;
+    }
+
     try {
+      // Add this debug check right before the fetch call
+      console.log('About to make API request with payload:', {
+        messageCount: userMessages.length,
+        apiKeyExists: !!apiKey,
+        apiKeyLength: apiKey?.length || 0
+      });
+      
+      // Create the payload separately for debugging
+      const payload = {
+        messages: userMessages.map((msg) => ({
+          role: msg.role,
+          content: msg.content,
+        })),
+        apiKey: apiKey,
+      };
+      
+      console.log('Full payload structure:', JSON.stringify(payload, null, 2));
+      
+      console.log('Sending chat request to API endpoint with API key length:', apiKey.length);
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          messages: userMessages.map((msg) => ({
-            role: msg.role,
-            content: msg.content,
-          })),
-          apiKey: apiKey || '',
-        }),
+        body: JSON.stringify(payload),
         signal: controller.signal,
       });
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        const errorText = await response.text();
+        console.error(`HTTP error: ${response.status}`, errorText);
+        throw new Error(`HTTP error! status: ${response.status}, details: ${errorText}`);
       }
 
       let textContent = '';
@@ -165,4 +207,18 @@ export async function createAiSdkEngine() {
       controller?.abort();
     },
   };
+}
+
+// // Debug function you can call from browser console
+if (typeof window !== 'undefined') {
+  // Make sure we're in browser environment
+  window.setMeetingBaasApiKey = (key: string) => {
+    localStorage.setItem('meetingbaas_api_key', key);
+    console.log('API key set:', key);
+  };
+  
+  // Add debug logging
+  console.log('AI SDK initialized');
+  console.log('Auth token in localStorage:', localStorage.getItem('auth_token'));
+  console.log('API key in localStorage:', localStorage.getItem('meetingbaas_api_key'));
 }
