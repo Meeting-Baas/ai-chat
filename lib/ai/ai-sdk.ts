@@ -43,7 +43,7 @@ export async function createAiSdkEngine() {
     onEnd?: (full: string) => void,
   ) {
     // Changed to match your sidebar-user-nav.tsx implementation
-    apiKey = localStorage.getItem('meetingbaas_api_key');
+    apiKey = localStorage.getItem('auth_token') || localStorage.getItem('meetingbaas_api_key');
     controller = new AbortController();
 
     try {

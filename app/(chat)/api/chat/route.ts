@@ -31,7 +31,9 @@ export async function POST(request: NextRequest) {
     let client = await createMCPClient({
       transport: {
         type: 'sse',
-        url: 'https://mcp.meetingbaas.com/sse',
+        url: process.env.NODE_ENV === 'production' 
+          ? (process.env.NEXT_PUBLIC_MEETINGBAAS_MCP_URL || 'https://mcp.meetingbaas.com/sse')
+          : (process.env.NEXT_PUBLIC_MEETINGBAAS_PRE_PROD_MCP_URL || 'https://mcp.pre-prod-meetingbaas.com/sse'),
         headers: {
           'x-meeting-baas-api-key': apiKey,
         }
