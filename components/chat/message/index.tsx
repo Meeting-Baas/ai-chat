@@ -6,7 +6,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { memo, useState } from 'react';
 import type { Vote } from '@/server/db/schema';
 import { DocumentToolCall, DocumentToolResult } from '../../artifact/document/document';
-import { PencilEditIcon, SparklesIcon } from '../../icons';
+import { PencilEditIcon, SparklesIcon, WarningIcon, CheckCircleFillIcon } from '../../icons';
 import { Markdown } from '../../markdown';
 import { MessageActions } from './message-actions';
 import { PreviewAttachment } from '../preview-attachment';
@@ -19,6 +19,77 @@ import { MessageEditor } from './message-editor';
 import { DocumentPreview } from '../../artifact/document/document-preview';
 import { MessageReasoning } from './message-reasoning';
 import type { UseChatHelpers } from '@ai-sdk/react';
+
+const formatApiResponse = (text: string): React.ReactNode => {
+  try {
+    // Only try to parse if it looks like JSON (starts with { or [)
+    if (text.trim().startsWith('{') || text.trim().startsWith('[')) {
+      // Check if the text is valid JSON
+      const parsed = JSON.parse(text);
+
+      // Check if it's a simple message (especially errors)
+      if (
+        typeof parsed === 'object' &&
+        parsed !== null &&
+        parsed.content?.length === 1 &&
+        parsed.content[0]?.type === 'text'
+      ) {
+        // It's a simple message, return it as a friendly message component
+        return (
+          <MessageNotification
+            type={parsed.isError ? 'error' : 'success'}
+            message={parsed.content[0].text}
+          />
+        );
+      }
+
+      // For more complex responses, still format as code
+      if (typeof parsed === 'object' && parsed !== null) {
+        return (
+          <div className="overflow-auto rounded-md bg-muted p-4">
+            <pre className="text-sm">
+              <code className="language-json">{JSON.stringify(parsed, null, 2)}</code>
+            </pre>
+          </div>
+        );
+      }
+    }
+    
+    // If it doesn't look like JSON or couldn't be parsed as JSON with our expected format,
+    // return null to fall back to Markdown
+    return null;
+  } catch (e) {
+    // JSON parsing failed, return null to fall back to Markdown
+    return null;
+  }
+};
+
+const MessageNotification = ({ type, message }: { type: 'success' | 'error', message: string }) => {
+  const icon = type === 'error'
+    ? <WarningIcon size={16} />
+    : <CheckCircleFillIcon size={16} />;
+
+  // Special styling for API key messages
+  const isApiKeyMessage = message.includes('API key received');
+  
+  return (
+    <div className={cn(
+      "flex items-center gap-2 p-3 rounded-md bg-muted/50 w-fit",
+      isApiKeyMessage && "bg-blue-100 dark:bg-blue-900/30"
+    )}>
+      <div className={
+        type === 'error' 
+          ? "text-red-600" 
+          : isApiKeyMessage 
+            ? "text-blue-600" 
+            : "text-green-600"
+      }>
+        {icon}
+      </div>
+      <span className="text-sm font-medium">{message}</span>
+    </div>
+  );
+};
 
 const PurePreviewMessage = ({
   chatId,
@@ -123,7 +194,11 @@ const PurePreviewMessage = ({
                             message.role === 'user',
                         })}
                       >
-                        <Markdown>{part.text}</Markdown>
+                        {message.role === 'assistant'
+                          ? typeof part.text === 'string'
+                            ? (formatApiResponse(part.text) || <Markdown>{part.text}</Markdown>)
+                            : <Markdown>{part.text}</Markdown>
+                          : <Markdown>{part.text}</Markdown>}
                       </div>
                     </div>
                   );
@@ -206,7 +281,11 @@ const PurePreviewMessage = ({
                           isReadonly={isReadonly}
                         />
                       ) : (
-                        <pre>{JSON.stringify(result, null, 2)}</pre>
+                        <ApiCallDetails
+                          toolName={toolName}
+                          args={toolInvocation.args}
+                          result={result}
+                        />
                       )}
                     </div>
                   );
@@ -272,5 +351,83 @@ export const ThinkingMessage = () => {
         </div>
       </div>
     </motion.div>
+  );
+};
+
+// Simplify to just show raw request and response as code blocks
+const ApiCallDetails = ({
+  toolName,
+  args,
+  result
+}: {
+  toolName: string;
+  args: Record<string, any>;
+  result: any;
+}) => {
+  const [showDetails, setShowDetails] = useState(false);
+
+  // Check if it's a simple message response
+  const isSimpleMessage = result?.content?.[0]?.text &&
+    result?.content?.length === 1 &&
+    result?.content[0]?.type === 'text';
+
+  // Extract message if it's a simple format
+  const message = isSimpleMessage ? result.content[0].text : null;
+  const isError = result?.isError === true;
+
+  return (
+    <div className="w-full">
+      <div className="flex justify-between items-center mb-2">
+        <span className="text-sm">Tool: <code className="bg-muted px-1 py-0.5 rounded">{toolName}</code></span>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setShowDetails(!showDetails)}
+        >
+          {showDetails ? 'Hide Details' : 'Show Details'}
+        </Button>
+      </div>
+
+      {/* Simple message format when details are hidden */}
+      {!showDetails && message && (
+        <div className={`p-3 rounded-md ${isError ? "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300" : "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300"}`}>
+          {message}
+        </div>
+      )}
+
+      {/* JSON for complex responses when details are hidden */}
+      {!showDetails && !message && (
+        <div className="overflow-auto rounded-md bg-muted p-4">
+          <pre className="text-sm">
+            <code>{JSON.stringify(result, null, 2)}</code>
+          </pre>
+        </div>
+      )}
+
+      {/* Simple request and response code blocks when details are shown */}
+      {showDetails && (
+        <div className="space-y-3">
+          {/* Request code block */}
+          <div>
+            <div className="text-xs font-medium text-muted-foreground mb-1">Request</div>
+            <div className="overflow-auto rounded-md bg-muted p-3">
+              <pre className="text-xs">
+                <code>{JSON.stringify(args || {}, null, 2)}</code>
+              </pre>
+            </div>
+          </div>
+
+          {/* Response code block */}
+          <div>
+            <div className="text-xs font-medium text-muted-foreground mb-1">Response</div>
+            <div className="overflow-auto rounded-md bg-muted p-3">
+              <pre className="text-xs">
+                <code>{JSON.stringify(result, null, 2)}</code>
+              </pre>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
   );
 };
