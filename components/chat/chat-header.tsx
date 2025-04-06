@@ -33,13 +33,23 @@ function PureChatHeader({
   
   // Check API key status when component mounts
   useEffect(() => {
-    // Fetch the auth status from a new lightweight endpoint
+    // Use the existing route.ts GET handler that we added
     const checkApiKeyStatus = async () => {
       try {
-        const response = await fetch('/api/auth/check-api-key');
+        // Use the route.ts GET handler we already implemented
+        const response = await fetch('/api/chat', {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        });
+        
         if (response.ok) {
           const data = await response.json();
           setHasApiKey(!!data.hasApiKey);
+          console.log('API key status:', data.hasApiKey);
+        } else {
+          console.error('API key check failed:', response.status);
         }
       } catch (error) {
         console.error('Failed to check API key status:', error);
@@ -110,8 +120,8 @@ function PureChatHeader({
       >
         <Link 
           href={hasApiKey 
-            ? "https://meetingbaas.com/logs" // Link to logs when they have an API key
-            : "https://meetingbaas.com/"     // Link to main site to get API key
+            ? "https://meetingbaas.com/logs" 
+            : "https://meetingbaas.com/"
           } 
           target="_blank"
         >
