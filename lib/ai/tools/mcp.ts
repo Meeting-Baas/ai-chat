@@ -5,26 +5,27 @@ export const toolsSchemas = {
     parameters: z.object({
       meetingUrl: z.string(),
       botName: z.string(),
-      webhookUrl: z.string().optional(),
-      recordingMode: z.string().optional(),
-      speechToText: z.boolean().optional(),
       reserved: z.boolean(),
     }),
+    required: ['meetingUrl', 'botName', 'reserved']
   },
   'leaveMeeting': {
     parameters: z.object({
       botId: z.string()
     }),
+    required: ['botId']
   },
   'getMeetingData': {
     parameters: z.object({
       botId: z.string()
     }),
+    required: ['botId']
   },
   'deleteData': {
     parameters: z.object({
       botId: z.string()
     }),
+    required: ['botId']
   },
   'createCalendar': {
     parameters: z.object({
@@ -34,66 +35,76 @@ export const toolsSchemas = {
       platform: z.enum(["Google", "Microsoft"]),
       rawCalendarId: z.string(),
     }),
+    required: ['oauthClientId', 'oauthClientSecret', 'oauthRefreshToken', 'platform', 'rawCalendarId']
   },
   'listCalendars': {
     parameters: z.object({}),
+    required: []
   },
   'getCalendar': {
     parameters: z.object({
       uuid: z.string()
     }),
+    required: ['uuid']
   },
   'deleteCalendar': {
     parameters: z.object({
       uuid: z.string()
     }),
+    required: ['uuid']
   },
   'resyncAllCalendars': {
     parameters: z.object({}),
+    required: []
   },
   'botsWithMetadata': {
     parameters: z.object({
-      botName: z.string().optional(),
-      createdAfter: z.string().optional(),
-      createdBefore: z.string().optional(),
-      cursor: z.string().optional(),
-      filterByExtra: z.string().optional(),
-      limit: z.number().optional(),
-      meetingUrl: z.string().optional(),
-      sortByExtra: z.string().optional(),
-      speakerName: z.string().optional(),
+      botName: z.string(),
+      createdAfter: z.string(),
+      createdBefore: z.string(),
+      cursor: z.string(),
+      filterByExtra: z.string(),
+      limit: z.number(),
+      meetingUrl: z.string(),
+      sortByExtra: z.string(),
+      speakerName: z.string(),
     }),
+    required: ['botName', 'createdAfter', 'createdBefore', 'cursor', 'filterByExtra', 'limit', 'meetingUrl', 'sortByExtra', 'speakerName']
   },
   'listEvents': {
     parameters: z.object({
       calendarUuid: z.string()
     }),
+    required: ['calendarUuid']
   },
   'scheduleRecordEvent': {
     parameters: z.object({
       eventUuid: z.string(),
       botName: z.string(),
-      extra: z.record(z.any()).optional(),
     }),
+    required: ['eventUuid', 'botName']
   },
   'unscheduleRecordEvent': {
     parameters: z.object({
       eventUuid: z.string()
     }),
+    required: ['eventUuid']
   },
   'updateCalendar': {
     parameters: z.object({
       uuid: z.string(),
-      oauthClientId: z.string().optional(),
-      oauthClientSecret: z.string().optional(),
-      oauthRefreshToken: z.string().optional(),
-      platform: z.enum(["Google", "Microsoft"]).optional(),
-      rawCalendarId: z.string().optional(),
+      oauthClientId: z.string(),
+      oauthClientSecret: z.string(),
+      oauthRefreshToken: z.string(),
+      platform: z.enum(["Google", "Microsoft"]),
+      rawCalendarId: z.string(),
     }),
+    required: ['uuid', 'oauthClientId', 'oauthClientSecret', 'oauthRefreshToken', 'platform', 'rawCalendarId']
   },
   'echo': {
     parameters: z.object({
       message: z.string()
     }),
+    required: ['message']
   },
 };
