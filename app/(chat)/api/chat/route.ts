@@ -49,7 +49,6 @@ export async function POST(request: Request) {
 
     const session = await auth();
     let baasSession = await meetingBaas.auth();
-    // Variable to store API key locally for this request if provided
     let apiKey = baasSession?.apiKey;
 
     // Enhanced API key logging and handling
@@ -105,6 +104,16 @@ export async function POST(request: Request) {
     }
     console.log("=== END API KEY DIAGNOSTICS ===");
     
+    // Check if both authentication methods are present
+    const isSessionAuthenticated = !!(session?.user?.id);
+    const hasApiKey = !!apiKey;
+    const hasBothAuthMethods = isSessionAuthenticated && hasApiKey;
+    
+    if (hasBothAuthMethods) {
+      console.log("User has both session authentication and API key");
+      // You could add special functionality here for users with both auth methods
+    }
+    
     // Check authentication - either normal auth or API key auth
     const isAuthenticated = !!(session?.user?.id || apiKey);
     
@@ -124,9 +133,6 @@ export async function POST(request: Request) {
         }
       });
     }
-
-    // Check if we have a valid session for chat operations
-    const isSessionAuthenticated = !!(session?.user?.id);
 
     // Define a fallback ID for API key users
     const userId = session?.user?.id || `api-key-user-${apiKey?.substring(0, 8)}`;
@@ -342,6 +348,17 @@ export async function POST(request: Request) {
         result.mergeIntoDataStream(dataStream, {
           sendReasoning: true,
         });
+
+        // Optionally inject authentication status information into the data stream
+        if (isAuthenticated) {
+          // For debugging or for client-side awareness
+          dataStream.writeData({
+            type: '_internal_auth_status',
+            hasSession: isSessionAuthenticated,
+            hasApiKey: hasApiKey,
+            hasBoth: hasBothAuthMethods
+          });
+        }
       },
       onError: (error: any) => {
         console.error("=== DETAILED DATA STREAM ERROR ===");
@@ -410,6 +427,36 @@ export async function DELETE(request: Request) {
   } catch (error) {
     return new Response('An error occurred while processing your request!', {
       status: 500,
+    });
+  }
+}
+
+// New API endpoint to check authentication status
+export async function GET(request: Request) {
+  try {
+    const session = await auth();
+    const baasSession = await meetingBaas.auth();
+    
+    const isSessionAuthenticated = !!(session?.user?.id);
+    const hasApiKey = !!baasSession?.apiKey;
+    
+    return new Response(JSON.stringify({
+      isAuthenticated: isSessionAuthenticated || hasApiKey,
+      hasSession: isSessionAuthenticated,
+      hasApiKey: hasApiKey,
+      hasBoth: isSessionAuthenticated && hasApiKey
+    }), {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
+  } catch (error) {
+    return new Response(JSON.stringify({ error: 'Authentication check failed' }), { 
+      status: 500,
+      headers: {
+        'Content-Type': 'application/json'
+      }
     });
   }
 }
