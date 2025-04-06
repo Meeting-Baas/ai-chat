@@ -48,51 +48,154 @@ export async function POST(request: Request) {
     } = await request.json();
 
     const session = await auth();
-    const baasSession = await meetingBaas.auth();
+    let baasSession = await meetingBaas.auth();
+    // Variable to store API key locally for this request if provided
+    let apiKey = baasSession?.apiKey;
 
-    // Log a portion of the API key (first few characters only for security)
-    console.log(`API Key starts with: ${baasSession?.apiKey?.substring(0, 4)}*** (length: ${baasSession?.apiKey?.length || 0})`);
-    console.log(`API Key status: ${baasSession?.apiKey ? 'Present' : 'Missing'}`);
-
-    if (!session || !session.user || !session.user.id) {
-      return new Response('Unauthorized', { status: 401 });
-    }
-
+    // Enhanced API key logging and handling
+    console.log("=== API KEY DIAGNOSTICS ===");
+    
+    // Retrieve API key from message if provided
     const userMessage = getMostRecentUserMessage(messages);
-
+    
     if (!userMessage) {
       return new Response('No user message found', { status: 400 });
     }
+    
+    // Extract message text safely with type checking
+    let messageText = '';
+    const firstPart = userMessage.parts[0];
+    
+    if (typeof firstPart === 'string') {
+      messageText = firstPart;
+    } else if (firstPart && 'type' in firstPart && firstPart.type === 'text' && 'text' in firstPart) {
+      messageText = firstPart.text;
+    }
+    
+    // Check for API key in the message - more permissive pattern to catch URLs, etc.
+    const apiKeyMatch = messageText.match(/^API[_\s]?KEY[:\s]+(.+)$/i);
+    
+    if (apiKeyMatch && apiKeyMatch[1]) {
+      // Set the API key directly (not storing in session)
+      apiKey = apiKeyMatch[1].trim();
+      console.log(`API key provided in message: ${apiKey.substring(0, 4)}***`);
+      
+      // Return a special response acknowledging the API key
+      return createDataStreamResponse({
+        execute: async (dataStream) => {
+          dataStream.writeData({
+            role: 'assistant',
+            id: generateUUID(),
+            content: [{
+              type: 'text', 
+              text: `API key received and will be used for future requests. For security, the key won't be displayed again.`
+            }]
+          });
+        }
+      });
+    }
+
+    // Log current API key status
+    console.log(`API Key present: ${apiKey ? 'Yes' : 'No'}`);
+    if (apiKey) {
+      console.log(`API Key first chars: ${apiKey.substring(0, 4)}***`);
+      console.log(`API Key length: ${apiKey.length}`);
+    } else {
+      console.log("No API key available in session");
+    }
+    console.log("=== END API KEY DIAGNOSTICS ===");
+    
+    // Check authentication - either normal auth or API key auth
+    const isAuthenticated = !!(session?.user?.id || apiKey);
+    
+    if (!isAuthenticated) {
+      // User is not authenticated, prompt for API key
+      return createDataStreamResponse({
+        execute: async (dataStream) => {
+          dataStream.writeData({
+            role: 'assistant',
+            id: generateUUID(),
+            content: [{
+              type: 'text', 
+              text: `You need to be authenticated to use this service. Please provide your API key by sending a message in this format: "API KEY: your_api_key_here"`
+            }],
+            isError: true
+          });
+        }
+      });
+    }
+
+    // Check if we have a valid session for chat operations
+    const isSessionAuthenticated = !!(session?.user?.id);
+
+    // Define a fallback ID for API key users
+    const userId = session?.user?.id || `api-key-user-${apiKey?.substring(0, 8)}`;
 
     const chat = await getChatById({ id });
 
     if (!chat) {
-      const title = await generateTitleFromUserMessage({
-        message: userMessage,
-      });
+      // Only create a new chat if we have a valid session
+      if (isSessionAuthenticated) {
+        const title = await generateTitleFromUserMessage({
+          message: userMessage,
+        });
+        
+        await saveChat({ id, userId, title });
+      } else {
+        // For API key only users (without session), provide a response that works without saving
+        return createDataStreamResponse({
+          execute: async (dataStream) => {
+            console.log("API key user without session - not saving chat history");
+            
+            // Process the message without saving chat history
+            const result = streamText({
+              model: myProvider.languageModel(selectedChatModel),
+              system: systemPrompt({ selectedChatModel }),
+              messages,
+              maxSteps: 5,
+              experimental_transform: smoothStream({ chunking: 'word' }),
+              experimental_generateMessageId: generateUUID,
+              tools: { ...toolSet },
+              onFinish: () => client.close(),
+              onError: () => client.close(),
+            });
 
-      await saveChat({ id, userId: session.user.id, title });
+            result.consumeStream();
+            result.mergeIntoDataStream(dataStream, {
+              sendReasoning: true,
+            });
+          },
+          onError: (error) => {
+            client.close();
+            return 'An error occurred while processing your request.';
+          }
+        });
+      }
     } else {
-      if (chat.userId !== session.user.id) {
+      // For existing chats, check ownership if the user has a session
+      if (isSessionAuthenticated && session?.user && chat.userId !== session.user.id) {
         return new Response('Unauthorized', { status: 401 });
       }
     }
 
-    await saveMessages({
-      messages: [
-        {
-          chatId: id,
-          id: userMessage.id,
-          role: 'user',
-          parts: userMessage.parts,
-          attachments: userMessage.experimental_attachments ?? [],
-          createdAt: new Date(),
-        },
-      ],
-    });
+    // For session users, save the message
+    if (isSessionAuthenticated) {
+      await saveMessages({
+        messages: [
+          {
+            chatId: id,
+            id: userMessage.id,
+            role: 'user',
+            parts: userMessage.parts,
+            attachments: userMessage.experimental_attachments ?? [],
+            createdAt: new Date(),
+          },
+        ],
+      });
+    }
 
-    // Determine which transport to use
-    let transport;
+    // Update the type definition for the transport variable
+    let transport: StdioMCPTransport | { type: 'sse'; url: string; headers: Record<string, string> };
     const mcpTransport = process.env.MCP_TRANSPORT || 'sse';
 
     console.log("Starting request processing");
@@ -132,12 +235,12 @@ export async function POST(request: Request) {
         cwd: '/Users/lazrossi/Documents/code/mcp-s/mcp-on-vercel'
       });
     } else {
-      // Create SSE transport with exact type signature
+      // Create SSE transport with explicit type
       const sseConfig: { type: 'sse'; url: string; headers: Record<string, string> } = {
-        type: 'sse',
+        type: 'sse', // Note: This needs to be the literal string 'sse', not a variable
         url: process.env.NEXT_PUBLIC_MEETINGBAAS_MCP_URL || 'https://mcp.meetingbaas.com/sse',
         headers: {
-          'x-meeting-baas-api-key': baasSession?.apiKey ?? '',
+          'x-meeting-baas-api-key': apiKey || '',
         }
       };
       transport = sseConfig;
@@ -171,17 +274,24 @@ export async function POST(request: Request) {
           experimental_transform: smoothStream({ chunking: 'word' }),
           experimental_generateMessageId: generateUUID,
           tools: {
+            // Weather tool is always available
             getWeather,
-            createDocument: createDocument({ session, dataStream }),
-            updateDocument: updateDocument({ session, dataStream }),
-            requestSuggestions: requestSuggestions({
-              session,
-              dataStream,
-            }),
+            
+            // Only include document tools if we have a valid session
+            ...(isSessionAuthenticated && session ? {
+              createDocument: createDocument({ session, dataStream }),
+              updateDocument: updateDocument({ session, dataStream }),
+              requestSuggestions: requestSuggestions({
+                session,
+                dataStream,
+              }),
+            } : {}),
+            
+            // External tools are always available
             ...toolSet
           },
           onFinish: async ({ response }) => {
-            if (session.user?.id) {
+            if (session?.user?.id) {
               try {
                 const assistantId = getTrailingMessageId({
                   messages: response.messages.filter(

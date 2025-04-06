@@ -24,12 +24,17 @@
   ],
   "env": {
     "API_URL": "https://api.meetingbaas.com",
-    "PRE_PROD_API_URL": "https://api.pre-prod-meetingbaas.com"
+    "PRE_PROD_API_URL": "https://api.pre-prod-meetingbaas.com",
+    "LOCAL_API_URL": "http://localhost:3001"
   },
   "rewrites": [
     {
       "source": "/accounts/api_key",
       "destination": "https://api.meetingbaas.com/accounts/api_key"
+    },
+    {
+      "source": "/local/accounts/api_key",
+      "destination": "http://localhost:3001/accounts/api_key"
     },
     {
       "source": "/pre-prod/accounts/api_key",
@@ -39,7 +44,8 @@
   "build": {
     "env": {
       "NEXT_PUBLIC_API_URL": "https://api.meetingbaas.com",
-      "NEXT_PUBLIC_PRE_PROD_API_URL": "https://api.pre-prod-meetingbaas.com"
+      "NEXT_PUBLIC_PRE_PROD_API_URL": "https://api.pre-prod-meetingbaas.com",
+      "NEXT_PUBLIC_LOCAL_API_URL": "http://localhost:3001"
     }
   }
 }
