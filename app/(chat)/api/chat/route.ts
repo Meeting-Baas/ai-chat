@@ -6,6 +6,7 @@ import {
   smoothStream,
   streamText,
 } from 'ai';
+import { Experimental_StdioMCPTransport as StdioMCPTransport } from 'ai/mcp-stdio';
 import { auth } from '@/server/auth';
 import { systemPrompt } from '@/lib/ai/prompts';
 import {
@@ -28,6 +29,9 @@ import { isProductionEnvironment } from '@/lib/constants';
 import { myProvider } from '@/lib/ai/providers';
 import * as meetingBaas from '@/server/meetingbaas';
 import { toolsSchemas as mcpToolsSchemas } from '@/lib/ai/tools/mcp';
+import path from 'path';
+import { exec } from 'child_process';
+import { z } from 'zod';
 
 export const maxDuration = 60;
 
@@ -45,6 +49,10 @@ export async function POST(request: Request) {
 
     const session = await auth();
     const baasSession = await meetingBaas.auth();
+
+    // Log a portion of the API key (first few characters only for security)
+    console.log(`API Key starts with: ${baasSession?.apiKey?.substring(0, 4)}*** (length: ${baasSession?.apiKey?.length || 0})`);
+    console.log(`API Key status: ${baasSession?.apiKey ? 'Present' : 'Missing'}`);
 
     if (!session || !session.user || !session.user.id) {
       return new Response('Unauthorized', { status: 401 });
@@ -83,53 +91,83 @@ export async function POST(request: Request) {
       ],
     });
 
+    // Determine which transport to use
+    let transport;
+    const mcpTransport = process.env.MCP_TRANSPORT || 'sse';
 
-    const client = await createMCPClient({
-      transport: {
+    console.log("Starting request processing");
+    console.log("MCP transport type:", mcpTransport);
+
+    let transportEnvVars: Record<string, string> = {};
+
+    if (mcpTransport === 'stdio') {
+      console.log("Starting stdio transport setup");
+
+      // Fix: Use the exact environment variable names from the documentation
+      const stdioEnvVars = {
+        NODE_ENV: process.env.NODE_ENV || 'development',
+        BAAS_API_KEY: process.env.BAAS_API_KEY || 'tesban',
+        REDIS_URL: process.env.REDIS_URL || '',
+        MCP_TRANSPORT_TYPE: 'stdio',
+        LOG_TO_FILE: 'true',
+        DISABLE_CONSOLE_LOGGING: 'true',
+        LOG_LEVEL: 'error'
+      };
+
+      console.log("Environment variables to pass:", {
+        BAAS_API_KEY: 'tesban', // Updated name
+        REDIS_URL: process.env.REDIS_URL ? 'set' : 'not set',
+        NODE_ENV: process.env.NODE_ENV || 'development',
+        MCP_TRANSPORT_TYPE: 'stdio'
+      });
+
+      // Store the env vars for later access
+      transportEnvVars = stdioEnvVars;
+
+      // Optionally add stderr and stdout handling to capture logs
+      transport = new StdioMCPTransport({
+        command: '/Users/lazrossi/.nvm/versions/node/v18.18.0/bin/node',
+        args: ['/Users/lazrossi/Documents/code/mcp-s/mcp-on-vercel/dist/api/stdio-server.js'],
+        env: stdioEnvVars,
+        cwd: '/Users/lazrossi/Documents/code/mcp-s/mcp-on-vercel'
+      });
+    } else {
+      // Create SSE transport with exact type signature
+      const sseConfig: { type: 'sse'; url: string; headers: Record<string, string> } = {
         type: 'sse',
-        url: 'https://mcp.meetingbaas.com/sse',
+        url: process.env.NEXT_PUBLIC_MEETINGBAAS_MCP_URL || 'https://mcp.meetingbaas.com/sse',
         headers: {
           'x-meeting-baas-api-key': baasSession?.apiKey ?? '',
         }
-      },
+      };
+      transport = sseConfig;
+    }
+
+    const client = await createMCPClient({
+      transport,
       onUncaughtError: (error) => {
         console.error('MCP Client error:', error);
       },
     });
 
-    const toolSet = await client.tools({ schemas: mcpToolsSchemas });
+    console.log("MCP client created successfully");
+
+    const toolSet = await client.tools({
+      schemas: mcpToolsSchemas
+    });
+    console.log("MCP tools initialized:", Object.keys(toolSet).length);
+
     return createDataStreamResponse({
       execute: async (dataStream) => {
+        console.log("Request execution started");
         const result = streamText({
           model: myProvider.languageModel(selectedChatModel),
           system: systemPrompt({ selectedChatModel }),
           messages,
           maxSteps: 5,
-          experimental_activeTools:
-            selectedChatModel === 'chat-model-reasoning'
-              ? []
-              : [
-                'getWeather',
-                'createDocument',
-                'updateDocument',
-                'requestSuggestions',
-                // mcp tools
-                'joinMeeting',
-                'leaveMeeting',
-                'getMeetingData',
-                'deleteData',
-                'createCalendar',
-                'listCalendars',
-                'getCalendar',
-                'deleteCalendar',
-                'resyncAllCalendars',
-                'botsWithMetadata',
-                'listEvents',
-                'scheduleRecordEvent',
-                'unscheduleRecordEvent',
-                'updateCalendar',
-                'echo'
-              ],
+          ...(selectedChatModel === 'chat-model-reasoning'
+            ? { experimental_activeTools: [] }
+            : {}),
           experimental_transform: smoothStream({ chunking: 'word' }),
           experimental_generateMessageId: generateUUID,
           tools: {
@@ -195,9 +233,37 @@ export async function POST(request: Request) {
           sendReasoning: true,
         });
       },
-      onError: () => {
+      onError: (error: any) => {
+        console.error("=== DETAILED DATA STREAM ERROR ===");
+        console.error(`Error type: ${error?.constructor?.name || 'Unknown'}`);
+        console.error(`Error message: ${error?.message || 'No message'}`);
+        console.error(`Error stack: ${error?.stack || 'No stack trace'}`);
+        console.error(`Transport type: ${mcpTransport}`);
+
+        // Log details about the MCP client
+        if (client) {
+          try {
+            console.error(`Has client: ${!!client}`);
+            console.error(`Client connected: ${Object.keys(client).join(', ')}`);
+          } catch (err) {
+            console.error(`Error inspecting client!`);
+          }
+        }
+
+        // Log Redis connection info
+        console.error(`Redis URL length: ${process.env.REDIS_URL?.length || 0}`);
+        console.error(`Redis URL prefix: ${process.env.REDIS_URL?.substring(0, 15)}...`);
+
+        // Log MCP server path
+        if (mcpTransport === 'stdio') {
+          console.error(`MCP server path: ${process.env.MCP_STDIO_ARGS}`);
+          console.error(`Environment variables passed: ${JSON.stringify(Object.keys(transportEnvVars))}`);
+        }
+
+        console.error("=== END DETAILED ERROR ===");
+
         client.close();
-        return 'Oops, an error occured!';
+        return 'An error occurred while communicating with the AI tools service. Please try again or contact support if the issue persists.';
       },
     });
   } catch (error) {
