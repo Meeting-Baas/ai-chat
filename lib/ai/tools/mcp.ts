@@ -1,10 +1,6 @@
-const {
-  allTools,
-  registerTools: registerBaasTools,
-} = require("@meeting-baas/sdk/tools");
 import { z } from "zod";
 
-// Define interfaces for tool and parameter to fix type errors
+// Define types for the SDK structures
 interface ToolParameter {
   name: string;
   schema: z.ZodType<any>;
@@ -16,46 +12,44 @@ interface Tool {
   parameters: ToolParameter[];
 }
 
-// Function to safely transform tool names to match the required pattern
-function transformToolName(name: string): string {
-  // First, remove the "default_api_" prefix if it exists
-  let transformedName = name.replace(/^default_api_/, "");
+// Import SDK components with type assertions
+const {
+  allTools,
+  registerTools: registerBaasTools,
+} = require("@meeting-baas/sdk/tools") as {
+  allTools: Tool[];
+  registerTools: (tools: Tool[], registerFn: (tool: Tool) => void) => void;
+};
 
-  // Now convert snake_case to camelCase
-  transformedName = transformedName.replace(/_([a-z])/g, (_, letter: string) => letter.toUpperCase());
-
-  // Ensure the name only contains allowed characters (alphanumeric, underscores, hyphens)
-  // Replace any other characters with underscores
-  transformedName = transformedName.replace(/[^a-zA-Z0-9_-]/g, "_");
-
-  return transformedName;
+// Define type for schema object
+interface SchemaDefinition {
+  parameters: z.ZodObject<any>;
+  required: string[];
 }
 
-// Extract schemas from all Meeting BaaS tools
-export const toolsSchemas = Object.fromEntries(
-  (allTools as Tool[]).map((tool: Tool) => [
-    // Use the safe transformation function for tool names
-    transformToolName(tool.name),
-    {
-      parameters: z.object(
-        Object.fromEntries(
-          tool.parameters.map((param: ToolParameter) => [
-            // Convert snake_case to camelCase for parameters, also ensuring valid names
-            param.name.replace(/_([a-z])/g, (_, letter: string) => letter.toUpperCase())
-              .replace(/[^a-zA-Z0-9_-]/g, "_"),
-            param.schema
-          ])
-        )
-      ),
-      required: tool.parameters
-        .filter((param: ToolParameter) => param.required)
-        .map((param: ToolParameter) => param.name.replace(/_([a-z])/g, (_, letter: string) => letter.toUpperCase())
-          .replace(/[^a-zA-Z0-9_-]/g, "_"))
-    }
-  ])
-);
+// Export original tool names directly from SDK without any transformation
+export const toolsSchemas: Record<string, SchemaDefinition> = {};
 
-// Log available tools for debugging
-console.log(`Loaded ${Object.keys(toolsSchemas).length} tools from Meeting BaaS SDK`);
-// Log the transformed tool names to help with debugging
-console.log(`Tool names: ${Object.keys(toolsSchemas).join(', ')}`);
+// Loop through all tools and use their original names
+(allTools || []).forEach((tool: Tool) => {
+  // Use the original name - DON'T sanitize it
+  const originalName = tool.name;
+
+  toolsSchemas[originalName] = {
+    parameters: z.object(
+      Object.fromEntries(
+        (tool.parameters || []).map((param: ToolParameter) => [
+          param.name,
+          param.schema
+        ])
+      )
+    ),
+    required: (tool.parameters || [])
+      .filter((param: ToolParameter) => param.required)
+      .map((param: ToolParameter) => param.name)
+  };
+});
+
+// Log tool info for debugging
+console.log(`Using ${Object.keys(toolsSchemas).length} untransformed tools directly from SDK`);
+console.log(`Original tool names: ${Object.keys(toolsSchemas).join(', ')}`);

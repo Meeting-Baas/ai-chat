@@ -1,3 +1,24 @@
+import { systemPrompt } from '@/lib/ai/prompts';
+import { myProvider } from '@/lib/ai/providers';
+import { createDocument } from '@/lib/ai/tools/create-document';
+import { getWeather } from '@/lib/ai/tools/get-weather';
+import { toolsSchemas as mcpToolsSchemas } from '@/lib/ai/tools/mcp';
+import { requestSuggestions } from '@/lib/ai/tools/request-suggestions';
+import { updateDocument } from '@/lib/ai/tools/update-document';
+import { isProductionEnvironment } from '@/lib/constants';
+import {
+  generateUUID,
+  getMostRecentUserMessage,
+  getTrailingMessageId,
+} from '@/lib/utils';
+import { auth } from '@/server/auth';
+import {
+  deleteChatById,
+  getChatById,
+  saveChat,
+  saveMessages,
+} from '@/server/db/queries';
+import * as meetingBaas from '@/server/meetingbaas';
 import {
   type UIMessage,
   appendResponseMessages,
@@ -7,31 +28,7 @@ import {
   streamText,
 } from 'ai';
 import { Experimental_StdioMCPTransport as StdioMCPTransport } from 'ai/mcp-stdio';
-import { auth } from '@/server/auth';
-import { systemPrompt } from '@/lib/ai/prompts';
-import {
-  deleteChatById,
-  getChatById,
-  saveChat,
-  saveMessages,
-} from '@/server/db/queries';
-import {
-  generateUUID,
-  getMostRecentUserMessage,
-  getTrailingMessageId,
-} from '@/lib/utils';
 import { generateTitleFromUserMessage } from '../../actions';
-import { createDocument } from '@/lib/ai/tools/create-document';
-import { updateDocument } from '@/lib/ai/tools/update-document';
-import { requestSuggestions } from '@/lib/ai/tools/request-suggestions';
-import { getWeather } from '@/lib/ai/tools/get-weather';
-import { isProductionEnvironment } from '@/lib/constants';
-import { myProvider } from '@/lib/ai/providers';
-import * as meetingBaas from '@/server/meetingbaas';
-import { toolsSchemas as mcpToolsSchemas } from '@/lib/ai/tools/mcp';
-import path from 'path';
-import { exec } from 'child_process';
-import { z } from 'zod';
 
 export const maxDuration = 60;
 
@@ -49,36 +46,36 @@ export async function POST(request: Request) {
 
     const session = await auth();
     let baasSession = await meetingBaas.auth();
-    let apiKey = baasSession?.apiKey;
+    let apiKey = baasSession?.apiKey ? baasSession.apiKey : '';
 
     // Enhanced API key logging and handling
     console.log("=== API KEY DIAGNOSTICS ===");
-    
+
     // Retrieve API key from message if provided
     const userMessage = getMostRecentUserMessage(messages);
-    
+
     if (!userMessage) {
       return new Response('No user message found', { status: 400 });
     }
-    
+
     // Extract message text safely with type checking
     let messageText = '';
     const firstPart = userMessage.parts[0];
-    
+
     if (typeof firstPart === 'string') {
       messageText = firstPart;
     } else if (firstPart && 'type' in firstPart && firstPart.type === 'text' && 'text' in firstPart) {
       messageText = firstPart.text;
     }
-    
+
     // Check for API key in the message - more permissive pattern to catch URLs, etc.
     const apiKeyMatch = messageText.match(/^API[_\s]?KEY[:\s]+(.+)$/i);
-    
+
     if (apiKeyMatch && apiKeyMatch[1]) {
       // Set the API key directly (not storing in session)
       apiKey = apiKeyMatch[1].trim();
       console.log(`API key provided in message: ${apiKey.substring(0, 4)}***`);
-      
+
       // Return a special response acknowledging the API key
       return createDataStreamResponse({
         execute: async (dataStream) => {
@@ -86,7 +83,7 @@ export async function POST(request: Request) {
             role: 'assistant',
             id: generateUUID(),
             content: [{
-              type: 'text', 
+              type: 'text',
               text: `API key received and will be used for future requests. For security, the key won't be displayed again.`
             }]
           });
@@ -103,20 +100,20 @@ export async function POST(request: Request) {
       console.log("No API key available in session");
     }
     console.log("=== END API KEY DIAGNOSTICS ===");
-    
+
     // Check if both authentication methods are present
     const isSessionAuthenticated = !!(session?.user?.id);
     const hasApiKey = !!apiKey;
     const hasBothAuthMethods = isSessionAuthenticated && hasApiKey;
-    
+
     if (hasBothAuthMethods) {
       console.log("User has both session authentication and API key");
       // You could add special functionality here for users with both auth methods
     }
-    
+
     // Check authentication - either normal auth or API key auth
     const isAuthenticated = !!(session?.user?.id || apiKey);
-    
+
     if (!isAuthenticated) {
       // User is not authenticated, prompt for API key
       return createDataStreamResponse({
@@ -125,7 +122,7 @@ export async function POST(request: Request) {
             role: 'assistant',
             id: generateUUID(),
             content: [{
-              type: 'text', 
+              type: 'text',
               text: `You need to be authenticated to use this service. Please provide your API key by sending a message in this format: "API KEY: your_api_key_here"`
             }],
             isError: true
@@ -145,14 +142,14 @@ export async function POST(request: Request) {
         const title = await generateTitleFromUserMessage({
           message: userMessage,
         });
-        
+
         await saveChat({ id, userId, title });
       } else {
         // For API key only users (without session), provide a response that works without saving
         return createDataStreamResponse({
           execute: async (dataStream) => {
             console.log("API key user without session - not saving chat history");
-            
+
             // Process the message without saving chat history
             const result = streamText({
               model: myProvider.languageModel(selectedChatModel),
@@ -244,7 +241,7 @@ export async function POST(request: Request) {
       // Create SSE transport with explicit type
       const sseConfig: { type: 'sse'; url: string; headers: Record<string, string> } = {
         type: 'sse', // Note: This needs to be the literal string 'sse', not a variable
-        url: process.env.NEXT_PUBLIC_MEETINGBAAS_MCP_URL || 'https://mcp.meetingbaas.com/sse',
+        url: 'https://mcp.meetingbaas.com/sse',
         headers: {
           'x-meeting-baas-api-key': apiKey || '',
         }
@@ -261,10 +258,70 @@ export async function POST(request: Request) {
 
     console.log("MCP client created successfully");
 
-    const toolSet = await client.tools({
-      schemas: mcpToolsSchemas
-    });
-    console.log("MCP tools initialized:", Object.keys(toolSet).length);
+    // Add detailed debug information before initializing tools
+    console.log(`Tool schemas count: ${Object.keys(mcpToolsSchemas).length}`);
+    console.log(`Tool schema names: ${Object.keys(mcpToolsSchemas).join(', ')}`);
+
+    let toolSet = {};
+
+    try {
+      console.log("Starting tool initialization with schemas:", Object.keys(mcpToolsSchemas));
+
+      // Log the exact structure of the 5th tool schema (index 4)
+      if (Object.keys(mcpToolsSchemas).length > 4) {
+        const fifthToolName = Object.keys(mcpToolsSchemas)[4];
+        console.log(`Tool at index 4 (${fifthToolName}):`, JSON.stringify(mcpToolsSchemas[fifthToolName]).substring(0, 300));
+
+        // Check if this name follows the required pattern
+        const isValidPattern = /^[a-zA-Z0-9_-]+$/.test(fifthToolName);
+        console.log(`Tool name "${fifthToolName}" matches required pattern: ${isValidPattern}`);
+      }
+
+      // Store the result in our variable rather than returning it
+      toolSet = await client.tools({
+        schemas: mcpToolsSchemas
+      });
+
+      console.log(`MCP tools successfully initialized: ${Object.keys(toolSet).length}`);
+    } catch (error: unknown) {
+      // Type-check the error before accessing its properties
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      console.error("TOOL INITIALIZATION ERROR:", errorMessage);
+      console.error("Error type:", error?.constructor?.name || typeof error);
+
+      // Check all tool names against the pattern
+      console.log("=== VALIDATING ALL TOOL NAMES ===");
+      Object.keys(mcpToolsSchemas).forEach((name, index) => {
+        const isValid = /^[a-zA-Z0-9_-]+$/.test(name);
+        if (!isValid) {
+          console.error(`Tool #${index} name '${name}' does NOT match the required pattern`);
+        }
+      });
+      console.log("=== END VALIDATION ===");
+
+      // Don't return anything here, just keep the empty object
+      toolSet = {};
+    }
+
+    // Add this to your error handling:
+    console.log("API Key length:", apiKey?.length || 0);
+    console.log("Checking schema format...");
+
+    // Check what's inside one of the parameter objects for a random tool
+    if (Object.keys(mcpToolsSchemas).length > 0) {
+      const sampleTool = Object.keys(mcpToolsSchemas)[0];
+      console.log(`Sample tool "${sampleTool}" schema:`, mcpToolsSchemas[sampleTool]);
+
+      // Check if parameters are properly defined
+      if (mcpToolsSchemas[sampleTool].parameters._def) {
+        console.log("Parameters structure looks valid");
+      } else {
+        console.log("WARNING: Parameters may not be in the expected format");
+      }
+    }
+
+    // Try to log more details about the client
+    console.log("Client connected:", !!client);
 
     return createDataStreamResponse({
       execute: async (dataStream) => {
@@ -282,7 +339,7 @@ export async function POST(request: Request) {
           tools: {
             // Weather tool is always available
             getWeather,
-            
+
             // Only include document tools if we have a valid session
             ...(isSessionAuthenticated && session ? {
               createDocument: createDocument({ session, dataStream }),
@@ -292,7 +349,7 @@ export async function POST(request: Request) {
                 dataStream,
               }),
             } : {}),
-            
+
             // External tools are always available
             ...toolSet
           },
@@ -436,10 +493,10 @@ export async function GET(request: Request) {
   try {
     const session = await auth();
     const baasSession = await meetingBaas.auth();
-    
+
     const isSessionAuthenticated = !!(session?.user?.id);
     const hasApiKey = !!baasSession?.apiKey;
-    
+
     return new Response(JSON.stringify({
       isAuthenticated: isSessionAuthenticated || hasApiKey,
       hasSession: isSessionAuthenticated,
@@ -452,7 +509,7 @@ export async function GET(request: Request) {
       }
     });
   } catch (error) {
-    return new Response(JSON.stringify({ error: 'Authentication check failed' }), { 
+    return new Response(JSON.stringify({ error: 'Authentication check failed' }), {
       status: 500,
       headers: {
         'Content-Type': 'application/json'
