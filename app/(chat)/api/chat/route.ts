@@ -243,7 +243,8 @@ export async function POST(request: Request) {
         type: 'sse', // Note: This needs to be the literal string 'sse', not a variable
         url: process.env.NEXT_PUBLIC_MEETINGBAAS_MCP_URL || 'https://mcp.meetingbaas.com/sse',
         headers: {
-          'x-meeting-baas-api-key': apiKey || '',
+          // Prioritize the BAAS_API_KEY from environment over session key
+          'x-meeting-baas-api-key': process.env.BAAS_API_KEY || apiKey || '',
         }
       };
       transport = sseConfig;
@@ -272,6 +273,107 @@ export async function POST(request: Request) {
       console.log(`Transport config:`, JSON.stringify(transport, null, 2).substring(0, 500));
       console.log(`Total schemas to register: ${Object.keys(mcpToolsSchemas).length}`);
 
+      // Validate schema format to check for common issues
+      console.log("=== SCHEMA VALIDATION ===");
+      const expectedSchemaKeys = ['parameters', 'required'];
+      const validSchemas: Record<string, any> = {};
+      let hasInvalidSchemas = false;
+
+      Object.entries(mcpToolsSchemas).forEach(([name, schema]) => {
+        // Check if schema has the expected structure
+        const missingKeys = expectedSchemaKeys.filter(k => !(k in schema));
+
+        if (missingKeys.length > 0) {
+          console.error(`Schema ${name} is missing required keys: ${missingKeys.join(', ')}`);
+          hasInvalidSchemas = true;
+          return;
+        }
+
+        // Check if 'parameters' has the expected _def property for Zod schemas
+        if (!schema.parameters._def) {
+          console.error(`Schema ${name} has invalid parameters format (missing _def)`);
+          hasInvalidSchemas = true;
+          return;
+        }
+
+        // Check if parameters is of expected type
+        if (schema.parameters._def.typeName !== 'ZodObject') {
+          console.error(`Schema ${name} parameters has unexpected type: ${schema.parameters._def.typeName}`);
+          hasInvalidSchemas = true;
+          return;
+        }
+
+        // For valid schemas, ensure 'required' is an array
+        if (!Array.isArray(schema.required)) {
+          console.log(`Fixing 'required' field for schema ${name}`);
+          schema.required = schema.required || [];
+        }
+
+        // Schema looks valid
+        validSchemas[name] = schema;
+        console.log(`Schema ${name} passed validation`);
+      });
+
+      if (hasInvalidSchemas) {
+        console.warn(`Found ${Object.keys(mcpToolsSchemas).length - Object.keys(validSchemas).length} invalid schemas`);
+        console.log("Using only validated schemas for tool initialization");
+      }
+      console.log("=== END SCHEMA VALIDATION ===");
+
+      // Transform schemas to proper JSON Schema format for MCP
+      console.log("=== SCHEMA TRANSFORMATION ===");
+      const transformedSchemas: Record<string, any> = {};
+
+      for (const name of Object.keys(validSchemas)) {
+        try {
+          const schema = validSchemas[name];
+          // Create a proper JSON Schema format that MCP expects
+          transformedSchemas[name] = {
+            name: name,
+            description: schema.description || `Tool for ${name}`,
+            parameters: {
+              type: "object",
+              properties: {},
+              required: Array.isArray(schema.required) ? schema.required : []
+            }
+          };
+
+          // Extract parameters from Zod object if possible
+          if (schema.parameters?._def?.shape) {
+            const shape = schema.parameters._def.shape;
+            for (const paramName of Object.keys(shape)) {
+              const paramSchema = shape[paramName];
+              // Add each parameter definition
+              if (paramSchema) {
+                let paramType = 'string';
+                if (paramSchema._def) {
+                  if (paramSchema._def.typeName === 'ZodString') paramType = 'string';
+                  else if (paramSchema._def.typeName === 'ZodNumber') paramType = 'number';
+                  else if (paramSchema._def.typeName === 'ZodBoolean') paramType = 'boolean';
+                }
+
+                transformedSchemas[name].parameters.properties[paramName] = {
+                  type: paramType,
+                  description: paramSchema.description || `Parameter ${paramName}`
+                };
+              }
+            }
+          }
+
+          console.log(`Successfully transformed schema for ${name}`);
+        } catch (err) {
+          console.error(`Failed to transform schema for ${name}:`, err);
+        }
+      }
+
+      console.log(`Transformed ${Object.keys(transformedSchemas).length} schemas`);
+      if (Object.keys(transformedSchemas).length > 0) {
+        console.log("Sample transformed schema structure created");
+      } else {
+        console.log("Warning: No schemas were successfully transformed");
+      }
+      console.log("=== END SCHEMA TRANSFORMATION ===");
+
       // Log sample schema structure
       if (Object.keys(mcpToolsSchemas).length > 0) {
         const sampleKey = Object.keys(mcpToolsSchemas)[0];
@@ -296,10 +398,18 @@ export async function POST(request: Request) {
 
       console.log("Calling client.tools() to initialize...");
 
-      // Store the result in our variable rather than returning it
+      // First try with transformed schemas
       toolSet = await client.tools({
-        schemas: mcpToolsSchemas
+        schemas: transformedSchemas
       });
+
+      // If no tools returned, try again with the original schemas
+      if (Object.keys(toolSet).length === 0) {
+        console.log("No tools returned with transformed schemas, trying original schemas...");
+        toolSet = await client.tools({
+          schemas: mcpToolsSchemas
+        });
+      }
 
       console.log(`MCP tools initialization complete`);
       console.log(`Initialized tools count: ${Object.keys(toolSet).length}`);

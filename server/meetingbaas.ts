@@ -3,7 +3,7 @@ import { cookies } from 'next/headers';
 import 'server-only';
 
 // Enhanced endpoint selection with detailed logging
-const API_ENDPOINT = process.env.NODE_ENV === 'development'
+const API_ENDPOINT = (process.env.NODE_ENV as string) === 'development'
     ? `${process.env.NEXT_PUBLIC_DEV_API_URL || 'http://localhost:3001'}/accounts/api_key`
     : `${process.env.NEXT_PUBLIC_MEETINGBAAS_API_URL || 'https://api.meetingbaas.com'}/accounts/api_key`;
 
@@ -28,10 +28,12 @@ export async function auth() {
         return null;
     }
 
-    // Local development fallback - if BAAS_LOCAL_FALLBACK is set, use a mock API key
-    if (process.env.NODE_ENV === 'development' && process.env.BAAS_LOCAL_FALLBACK === 'true') {
-        console.log('Using local development fallback API key');
-        return { jwt, apiKey: 'local-dev-api-key' };
+    // Local development fallback
+    if ((process.env.NODE_ENV as string) === 'development') {
+        // Use BAAS_API_KEY from environment if available, otherwise use fallback
+        const envApiKey = process.env.BAAS_API_KEY || 'dev-fallback-key';
+        console.log(`Using environment API key: ${envApiKey.substring(0, 4)}***`);
+        return { jwt, apiKey: envApiKey };
     }
 
     console.log('Fetching API key from MeetingBaas API...');
@@ -62,9 +64,9 @@ export async function auth() {
             console.log(`Failed to fetch API key: ${response.status} ${response.statusText}`);
 
             // In development, provide a fallback key if fetch fails
-            if (process.env.NODE_ENV === 'development') {
+            if ((process.env.NODE_ENV as string) === 'development') {
                 console.log('Using development fallback API key after fetch failure');
-                return { jwt, apiKey: 'dev-fallback-key' };
+                return { jwt, apiKey: 'tesban' };
             }
 
             console.log('=== MEETINGBAAS AUTH ENDED ===');
@@ -103,7 +105,7 @@ export async function auth() {
         }
 
         // In development, provide a fallback key
-        if (process.env.NODE_ENV === 'development') {
+        if ((process.env.NODE_ENV as string) === 'development') {
             console.log('Using development fallback API key after error');
             return { jwt, apiKey: 'error-fallback-key' };
         }
