@@ -241,7 +241,7 @@ export async function POST(request: Request) {
       // Create SSE transport with explicit type
       const sseConfig: { type: 'sse'; url: string; headers: Record<string, string> } = {
         type: 'sse', // Note: This needs to be the literal string 'sse', not a variable
-        url: 'https://mcp.meetingbaas.com/sse',
+        url: process.env.NEXT_PUBLIC_MEETINGBAAS_MCP_URL || 'https://mcp.meetingbaas.com/sse',
         headers: {
           'x-meeting-baas-api-key': apiKey || '',
         }
@@ -265,7 +265,24 @@ export async function POST(request: Request) {
     let toolSet = {};
 
     try {
-      console.log("Starting tool initialization with schemas:", Object.keys(mcpToolsSchemas));
+      console.log("=== TOOL INITIALIZATION DEBUG START ===");
+      console.log(`API Key type: ${typeof apiKey}, Length: ${apiKey?.length || 0}`);
+      console.log(`API Key prefix: ${apiKey ? apiKey.substring(0, 4) + '***' : 'null'}`);
+      console.log(`Transport type: ${mcpTransport}`);
+      console.log(`Transport config:`, JSON.stringify(transport, null, 2).substring(0, 500));
+      console.log(`Total schemas to register: ${Object.keys(mcpToolsSchemas).length}`);
+
+      // Log sample schema structure
+      if (Object.keys(mcpToolsSchemas).length > 0) {
+        const sampleKey = Object.keys(mcpToolsSchemas)[0];
+        console.log(`Sample schema (${sampleKey}) structure:`,
+          JSON.stringify({
+            required: mcpToolsSchemas[sampleKey].required,
+            paramKeys: Object.keys(mcpToolsSchemas[sampleKey].parameters._def?.shape || {}),
+            defType: mcpToolsSchemas[sampleKey].parameters._def?.typeName
+          }, null, 2)
+        );
+      }
 
       // Log the exact structure of the 5th tool schema (index 4)
       if (Object.keys(mcpToolsSchemas).length > 4) {
@@ -277,17 +294,65 @@ export async function POST(request: Request) {
         console.log(`Tool name "${fifthToolName}" matches required pattern: ${isValidPattern}`);
       }
 
+      console.log("Calling client.tools() to initialize...");
+
       // Store the result in our variable rather than returning it
       toolSet = await client.tools({
         schemas: mcpToolsSchemas
       });
 
-      console.log(`MCP tools successfully initialized: ${Object.keys(toolSet).length}`);
+      console.log(`MCP tools initialization complete`);
+      console.log(`Initialized tools count: ${Object.keys(toolSet).length}`);
+
+      // Inspect the returned toolSet even if empty
+      if (Object.keys(toolSet).length === 0) {
+        console.log("No tools returned. Checking toolSet object type:", typeof toolSet);
+        console.log("ToolSet constructor:", toolSet?.constructor?.name);
+        console.log("ToolSet properties:", Object.getOwnPropertyNames(toolSet));
+
+        // Try to access any internal properties that might give clues
+        try {
+          console.log("ToolSet prototype chain:",
+            Object.getPrototypeOf(toolSet) ? "Has prototype" : "No prototype");
+          console.log("ToolSet toString():", String(toolSet).substring(0, 100));
+        } catch (err) {
+          console.log("Error inspecting toolSet:", err);
+        }
+      } else {
+        // Log the first tool name and structure
+        const firstToolName = Object.keys(toolSet)[0];
+        console.log(`First initialized tool: ${firstToolName}`);
+        if (firstToolName) {
+          console.log(`Tool structure:`, typeof (toolSet as Record<string, unknown>)[firstToolName]);
+        } else {
+          console.log(`Tool structure: Not accessible`);
+        }
+      }
+
+      console.log("=== TOOL INITIALIZATION DEBUG END ===");
     } catch (error: unknown) {
+      console.error("=== TOOL INITIALIZATION ERROR DETAILS ===");
+
       // Type-check the error before accessing its properties
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      console.error("TOOL INITIALIZATION ERROR:", errorMessage);
+      console.error("Error message:", errorMessage);
       console.error("Error type:", error?.constructor?.name || typeof error);
+
+      if (error instanceof Error) {
+        console.error("Error name:", error.name);
+        console.error("Error stack:", error.stack);
+
+        // Try to access more properties that might exist on specific error types
+        try {
+          const anyError = error as any;
+          if (anyError.code) console.error("Error code:", anyError.code);
+          if (anyError.statusCode) console.error("Status code:", anyError.statusCode);
+          if (anyError.response) console.error("Response:", anyError.response);
+          if (anyError.cause) console.error("Cause:", anyError.cause);
+        } catch (err) {
+          console.error("Error while extracting additional error details");
+        }
+      }
 
       // Check all tool names against the pattern
       console.log("=== VALIDATING ALL TOOL NAMES ===");
@@ -298,6 +363,21 @@ export async function POST(request: Request) {
         }
       });
       console.log("=== END VALIDATION ===");
+
+      // Try with a smaller subset to see if it's a specific tool causing issues
+      try {
+        console.log("Attempting initialization with only the first tool...");
+        const firstToolName = Object.keys(mcpToolsSchemas)[0];
+        const smallerSchemas = { [firstToolName]: mcpToolsSchemas[firstToolName] };
+
+        const miniToolSet = await client.tools({ schemas: smallerSchemas });
+        console.log(`Single tool initialization result: ${Object.keys(miniToolSet).length} tools`);
+      } catch (subsetError) {
+        console.error("Failed to initialize with subset:",
+          subsetError instanceof Error ? subsetError.message : String(subsetError));
+      }
+
+      console.error("=== END TOOL INITIALIZATION ERROR DETAILS ===");
 
       // Don't return anything here, just keep the empty object
       toolSet = {};
