@@ -30,26 +30,68 @@ interface SchemaDefinition {
 // Export original tool names directly from SDK without any transformation
 export const toolsSchemas: Record<string, SchemaDefinition> = {};
 
-// Loop through all tools and use their original names
-(allTools || []).forEach((tool: Tool) => {
-  // Use the original name - DON'T sanitize it
-  const originalName = tool.name;
+// Log the raw tools from SDK
+console.log("=== RAW TOOLS FROM SDK ===");
+console.log(`Number of tools from SDK: ${allTools?.length || 0}`);
+if (allTools?.length > 0) {
+  console.log("Sample tool structure:", {
+    name: allTools[0].name,
+    paramCount: allTools[0].parameters?.length || 0,
+    paramNames: allTools[0].parameters?.map(p => p.name) || []
+  });
+}
+console.log("=== END RAW TOOLS ===");
 
-  toolsSchemas[originalName] = {
-    parameters: z.object(
-      Object.fromEntries(
-        (tool.parameters || []).map((param: ToolParameter) => [
-          param.name,
-          param.schema
-        ])
-      )
-    ),
-    required: (tool.parameters || [])
-      .filter((param: ToolParameter) => param.required)
-      .map((param: ToolParameter) => param.name)
+// Ensure we're using registerBaasTools from the SDK
+registerBaasTools(allTools, (tool: Tool) => {
+  const originalName = tool.name;
+  const parameters = (tool.parameters || []);
+
+  // Create zod object from parameters
+  const paramEntries = parameters.map((param: ToolParameter) => [
+    param.name,
+    param.schema
+  ]);
+
+  // Get required parameters
+  const requiredParams = parameters
+    .filter((param: ToolParameter) => param.required)
+    .map((param: ToolParameter) => param.name);
+
+  // Create the schema with proper structure
+  const schema = {
+    parameters: z.object(Object.fromEntries(paramEntries)),
+    required: requiredParams,
+    name: originalName, // Add name to schema
+    description: `Tool for ${originalName}` // Add description
   };
+
+  toolsSchemas[originalName] = schema;
+
+  // Log each tool's registration details
+  console.log(`=== Tool Registration: ${originalName} ===`);
+  console.log(`Parameters count: ${parameters.length}`);
+  console.log(`Required parameters: ${requiredParams.length}`);
+  console.log(`Parameter names: ${parameters.map(p => p.name).join(', ')}`);
+  console.log(`Required parameter names: ${requiredParams.join(', ')}`);
+  console.log(`Schema structure:`, {
+    hasParameters: !!schema.parameters,
+    hasRequired: Array.isArray(schema.required),
+    requiredCount: schema.required.length
+  });
+  console.log(`=== End Tool Registration ===`);
 });
 
-// Log tool info for debugging
-console.log(`Using ${Object.keys(toolsSchemas).length} untransformed tools directly from SDK`);
-console.log(`Original tool names: ${Object.keys(toolsSchemas).join(', ')}`);
+// Log final tool schemas
+console.log("=== FINAL TOOL SCHEMAS ===");
+console.log(`Total tools registered: ${Object.keys(toolsSchemas).length}`);
+console.log(`Tool names: ${Object.keys(toolsSchemas).join(', ')}`);
+if (Object.keys(toolsSchemas).length > 0) {
+  const sampleTool = Object.keys(toolsSchemas)[0];
+  console.log(`Sample tool schema structure:`, {
+    name: sampleTool,
+    hasParameters: !!toolsSchemas[sampleTool].parameters,
+    requiredCount: toolsSchemas[sampleTool].required.length
+  });
+}
+console.log("=== END FINAL SCHEMAS ===");
