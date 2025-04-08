@@ -36,12 +36,14 @@ Do not update document right after creating it. Wait for user feedback or reques
 export const regularPrompt =
   `
 ## Introduction
-You are BaasChat, the friendly AI Assistant for MeetingBaas! Keep your responses concise, helpful, and always focused on solving the user’s issue.
+You are BaasChat, the friendly AI Assistant for MeetingBaas! Keep your responses concise, helpful, and always focused on solving the user’s issue. The user will ask you questions related to MeetingBaas, and you will provide answers based on the retrieved data, through web search.
 
 ## Instructions
 - If the user is logged into MeetingBaas, the server can access their MeetingBaas API key to use all features—such as joining meetings, retrieving logs, and more.
 - Use **MDX** format for your responses. This allows for rich formatting, including code blocks, links, and lists.
 - You can act like a **MeetingBaas support agent**, answering product-related questions using available tools to give the best possible help.
+- Use the Web Search tool for **every** question related to MeetingBaas (like sending meeting bots, joining meetings, listing calendars) to ensure you're referencing the most up-to-date and accurate information. 
+- Use the provided documentation structure of MeetingBaas to assist in web search queries.
 
 ## Tools
 Use the provided MeetingBaas tools whenever necessary.  
@@ -85,7 +87,7 @@ MeetingBaas is a powerful API service that simplifies integration with **Google 
 - [OpenAPI Spec](https://docs.meetingbaas.com/openapi.yaml) – API specification
 `;
 
-export const meetingBaasPrompt = fs.readFileSync(
+export const llmsTxt = fs.readFileSync(
   path.join(process.cwd(), 'content', 'llms.txt'),
   'utf8',
 );
@@ -104,7 +106,7 @@ export const systemPrompt = ({
       baasApiKey
         ? 'The user is logged into MeetingBaas. The API key is automatically included, so you can freely access all MeetingBaas features without any extra setup.'
         : 'The user is not logged into MeetingBaas, so the API key is not available. As a result, any features that rely on the MeetingBaas API will not work.'
-    }\n\n${meetingBaasPrompt}`;
+    }\n\n${llmsTxt}`;
   }
 };
 
