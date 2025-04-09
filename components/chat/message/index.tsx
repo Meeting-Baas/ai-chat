@@ -184,6 +184,7 @@ const PurePreviewMessage = ({
                         <RAGDetails
                           isLoading={true}
                           args={args}
+                          chatId={chatId}
                         />
                       ) : (
                         <ToolDetails
@@ -225,6 +226,7 @@ const PurePreviewMessage = ({
                           isLoading={false}
                           result={result}
                           args={args}
+                          chatId={chatId}
                         />
                       ) : (
                         <ToolDetails

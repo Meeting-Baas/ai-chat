@@ -1,20 +1,37 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { LoaderIcon } from '@/components/icons';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import Markdown from 'react-markdown';
+import { useChat } from '@ai-sdk/react';
+import type { DataStreamDelta } from '../data-stream-handler';
 
 interface RAGDetailsProps {
   isLoading?: boolean;
-  result?: string;
+  result?: RAGDetailsState | null;
   args?: any;
+  chatId: string;
 }
 
-export function RAGDetails({ isLoading, result, args }: RAGDetailsProps) {
+interface RAGDetailsState {
+  content: string;
+  status: 'streaming' | 'idle';
+}
+
+export function RAGDetails({
+  isLoading,
+  result,
+  args,
+  chatId,
+}: RAGDetailsProps) {
+  const { data: dataStream } = useChat({ id: chatId });
   const [isExpanded, setIsExpanded] = useState(isLoading);
+  const [ragDetails, setRagDetails] = useState<RAGDetailsState | null>(result ?? null);
+
+  const lastProcessedIndex = useRef(-1);
   const variants = {
     collapsed: {
       height: 0,
@@ -29,6 +46,46 @@ export function RAGDetails({ isLoading, result, args }: RAGDetailsProps) {
       marginBottom: '0.5rem',
     },
   };
+
+  useEffect(() => {
+    if (!dataStream?.length) return;
+
+    const newDeltas = dataStream.slice(lastProcessedIndex.current + 1);
+    lastProcessedIndex.current = dataStream.length - 1;
+
+    (newDeltas as DataStreamDelta[]).forEach((delta: DataStreamDelta) => {
+      setRagDetails((draftArtifact) => {
+        if (!draftArtifact) {
+          return { content: '', status: 'streaming' };
+        }
+
+        switch (delta.type) {
+          case 'information-delta':
+            return {
+              ...draftArtifact,
+              content: draftArtifact.content + delta.content,
+              status: 'streaming',
+            };
+            
+          case 'clear':
+            return {
+              ...draftArtifact,
+              content: '',
+              status: 'streaming',
+            };
+
+          case 'finish':
+            return {
+              ...draftArtifact,
+              status: 'idle',
+            };
+
+          default:
+            return draftArtifact;
+        }
+      });
+    });
+  }, [dataStream]);
 
   return (
     <div className="flex flex-col">
@@ -83,11 +140,9 @@ export function RAGDetails({ isLoading, result, args }: RAGDetailsProps) {
               <div className="flex flex-col gap-2">
                 <div className="text-lg font-medium">Results</div>
                 {isLoading && (
-                  <span className="text-muted-foreground">
-                    Thinking...
-                  </span>
+                  <span className="text-muted-foreground">Thinking...</span>
                 )}
-                <Markdown>{result}</Markdown>
+                <Markdown>{ragDetails?.content}</Markdown>
               </div>
             </div>
           </motion.div>

@@ -129,7 +129,7 @@ export async function POST(request: Request) {
               session,
               dataStream,
             }),
-            getInformation,
+            getInformation: getInformation({ dataStream }),
             ...mcpTools
           },
           onFinish: async ({ response }) => {
