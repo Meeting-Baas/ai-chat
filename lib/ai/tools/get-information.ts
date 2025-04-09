@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { type DataStreamWriter, streamText, tool } from 'ai';
+import { type DataStreamWriter, smoothStream, streamText, tool } from 'ai';
 import { myProvider } from '../providers';
 import { getInformationPrompt } from '../prompts';
 
@@ -23,28 +23,33 @@ export const getInformation = ({ dataStream }: GetInformationProps) =>
         content: '',
       });
 
-      const { textStream } = streamText({
+      let draftContent = '';
+      const { fullStream } = streamText({
         model: myProvider.languageModel('artifact-model'),
         system: getInformationPrompt,
+        experimental_transform: smoothStream({ chunking: 'word' }),
         prompt: `Retrieve exact raw data from knowledge base to answer: "${question}". Plain text, minimal length, no markdown formatting or conversation.`,
       });
 
-      let fullText = '';
+      for await (const delta of fullStream) {
+        const { type } = delta;
 
-      for await (const textChunk of textStream) {
-        fullText += textChunk;
+        if (type === 'text-delta') {
+          const { textDelta } = delta;
 
-        dataStream.writeData({
-          type: 'information-delta',
-          content: textChunk,
-        });
+          draftContent += textDelta;
+
+          dataStream.writeData({
+            type: 'information-delta',
+            content: textDelta,
+          });
+        }
       }
 
       dataStream.writeData({ type: 'finish', content: '' });
 
       return {
-        question,
-        content: fullText,
+        content: draftContent,
         status: 'idle',
       };
     },
