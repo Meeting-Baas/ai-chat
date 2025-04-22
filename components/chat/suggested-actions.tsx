@@ -13,24 +13,40 @@ interface SuggestedActionsProps {
 function PureSuggestedActions({ chatId, append }: SuggestedActionsProps) {
   const suggestedActions = [
     {
-      title: 'What meeting platforms does',
-      label: 'MeetingBaas\'s API support?',
-      action: 'What meeting platforms does MeetingBaas\'s API support?',
+      title: 'Send a bot to a meeting',
+      label: 'on Zoom, Google Meet, or Microsoft Teams',
+      action: 'Send a bot to a meeting on Zoom, Google Meet, or Microsoft Teams. Prompt the user to provide the meeting link for these platforms(not a dummy link). Do the action and informa him of functionnalities after doing the action.',
     },
     {
-      title: 'Write code to',
-      label: 'send a Google Meet meeting bot',
-      action: `Write code to send a Google Meet meeting bot`,
+      title: 'List available tools',
+      label: 'and the relevant API endpoints',
+      action: `List available tools and the relevant API endpoints. Sort by API reference, updates, and more.. Always reference the relevant link from the documentation.`,
     },
+    // {
+    //   title: '',
+    //   label: `webhook data look like?`,
+    //   action: `How does MeetingBaas's webhook data look like?`,
+    // },
     {
-      title: 'How does MeetingBaas\'s',
-      label: `webhook data look like?`,
-      action: `How does MeetingBaas's webhook data look like?`,
+      title: 'List all the connected calendar',
+      label: 'of my end users',
+      action: 'List all the connected calendar of my end users',
     },
+    // {
+    // {
+    //   title: 'Write TypeScript code to',
+    //   label: 'list recent meetings and their statuses',
+    //   action: 'Write TypeScript code to list recent meetings and their statuses',
+    // },
+    //   title: 'Write TypeScript code to',
+    //   label: 'list recent meetings and their statuses',
+    //   action: 'Write TypeScript code to list recent meetings and their statuses',
+    // },
+
     {
-      title: 'List all the meetings',
-      label: 'in my calendar',
-      action: 'List all the meetings in my calendar',
+      title: 'Get my latest invoices',
+      label: 'from Stripe',
+      action: 'Open my Stripe dashboard simply by providing this link: http://billing.stripe.com/p/login/7sI5nz6oocuR3PW144',
     },
   ];
 
