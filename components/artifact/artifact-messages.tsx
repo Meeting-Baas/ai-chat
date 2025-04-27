@@ -1,13 +1,13 @@
-import { PreviewMessage } from '../chat/message';
-import { useScrollToBottom } from '../../hooks/use-scroll-to-bottom';
 import type { Vote } from '@/server/db/schema';
-import type { UIMessage } from 'ai';
-import { memo } from 'react';
-import equal from 'fast-deep-equal';
-import type { UIArtifact } from '.';
 import type { UseChatHelpers } from '@ai-sdk/react';
+import type { UIMessage } from 'ai';
+import equal from 'fast-deep-equal';
+import { memo } from 'react';
+import type { UIArtifact } from '.';
+import { useScrollToBottom } from '../../hooks/use-scroll-to-bottom';
+import { PreviewMessage } from '../chat/message';
 
-interface ArtifactMessagesProps {
+export interface ArtifactMessagesProps {
   chatId: string;
   status: UseChatHelpers['status'];
   votes: Array<Vote> | undefined;
@@ -15,6 +15,7 @@ interface ArtifactMessagesProps {
   setMessages: UseChatHelpers['setMessages'];
   reload: UseChatHelpers['reload'];
   isReadonly: boolean;
+  append: UseChatHelpers['append'];
   artifactStatus: UIArtifact['status'];
 }
 
@@ -26,6 +27,7 @@ function PureArtifactMessages({
   setMessages,
   reload,
   isReadonly,
+  append,
 }: ArtifactMessagesProps) {
   const [messagesContainerRef, messagesEndRef] =
     useScrollToBottom<HTMLDivElement>();
@@ -49,6 +51,7 @@ function PureArtifactMessages({
           setMessages={setMessages}
           reload={reload}
           isReadonly={isReadonly}
+          append={append}
         />
       ))}
 
