@@ -1,33 +1,35 @@
-import {
-  type UIMessage,
-  appendResponseMessages,
-  createDataStreamResponse,
-  smoothStream,
-  streamText,
-} from 'ai';
-import { auth } from '@/server/auth';
 import { systemPrompt } from '@/lib/ai/prompts';
+import { myProvider } from '@/lib/ai/providers';
+import { botsWithMetadata } from '@/lib/ai/tools/bots-metadata-sheet';
+import { createDocument } from '@/lib/ai/tools/create-document';
+import { getInformation } from '@/lib/ai/tools/get-information';
+import { getWeather } from '@/lib/ai/tools/get-weather';
+import { listToolsCards } from '@/lib/ai/tools/list-tools-cards';
+import { getMCPTools } from '@/lib/ai/tools/mcp';
+import { requestSuggestions } from '@/lib/ai/tools/request-suggestions';
+import { updateDocument } from '@/lib/ai/tools/update-document';
+import { isProductionEnvironment } from '@/lib/constants';
+import {
+  generateUUID,
+  getMostRecentUserMessage,
+  getTrailingMessageId,
+} from '@/lib/utils';
+import { auth } from '@/server/auth';
 import {
   deleteChatById,
   getChatById,
   saveChat,
   saveMessages,
 } from '@/server/db/queries';
-import {
-  generateUUID,
-  getMostRecentUserMessage,
-  getTrailingMessageId,
-} from '@/lib/utils';
-import { generateTitleFromUserMessage } from '../../actions';
-import { createDocument } from '@/lib/ai/tools/create-document';
-import { updateDocument } from '@/lib/ai/tools/update-document';
-import { requestSuggestions } from '@/lib/ai/tools/request-suggestions';
-import { getWeather } from '@/lib/ai/tools/get-weather';
-import { isProductionEnvironment } from '@/lib/constants';
-import { myProvider } from '@/lib/ai/providers';
 import * as meetingBaas from '@/server/meetingbaas';
-import { getMCPTools } from '@/lib/ai/tools/mcp';
-import { getInformation } from '@/lib/ai/tools/get-information';
+import {
+  type UIMessage,
+  appendResponseMessages,
+  createDataStreamResponse,
+  smoothStream,
+  streamText
+} from 'ai';
+import { generateTitleFromUserMessage } from '../../actions';
 
 export const maxDuration = 60;
 
@@ -104,6 +106,8 @@ export async function POST(request: Request) {
                   'updateDocument',
                   'requestSuggestions',
                   'getInformation',
+                  'listToolsCards',
+                  'botsWithMetadata',
                   ...(Object.keys(mcpTools) as any[]),
                 ],
           experimental_transform: smoothStream({ chunking: 'word' }),
@@ -117,7 +121,9 @@ export async function POST(request: Request) {
               dataStream,
             }),
             getInformation,
-            ...mcpTools,
+            listToolsCards,
+            botsWithMetadata,
+            ...mcpTools
           },
           onFinish: async ({ response }) => {
             if (session.user?.id) {
