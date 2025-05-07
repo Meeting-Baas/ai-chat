@@ -1,31 +1,31 @@
 'use client';
 
+import { RAGDetails } from '@/components/tools/rag-details';
+import { ToolDetails } from '@/components/tools/tool-details';
+import { TextShimmer } from '@/components/ui/text-shimmer';
+import { cn } from '@/lib/utils';
+import type { Vote } from '@/server/db/schema';
+import type { UseChatHelpers } from '@ai-sdk/react';
 import type { UIMessage } from 'ai';
 import cx from 'classnames';
+import equal from 'fast-deep-equal';
+import { FishIcon } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import { memo, useState } from 'react';
-import type { Vote } from '@/server/db/schema';
 import {
-  DocumentToolCall,
-  DocumentToolResult,
+    DocumentToolCall,
+    DocumentToolResult,
 } from '../../artifact/document/document';
+import { DocumentPreview } from '../../artifact/document/document-preview';
 import { PencilEditIcon } from '../../icons';
 import { Markdown } from '../../markdown';
-import { MessageActions } from './message-actions';
-import { PreviewAttachment } from '../preview-attachment';
 import { Weather } from '../../tools/weather';
-import equal from 'fast-deep-equal';
-import { cn } from '@/lib/utils';
 import { Button } from '../../ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../../ui/tooltip';
+import { PreviewAttachment } from '../preview-attachment';
+import { MessageActions } from './message-actions';
 import { MessageEditor } from './message-editor';
-import { DocumentPreview } from '../../artifact/document/document-preview';
 import { MessageReasoning } from './message-reasoning';
-import type { UseChatHelpers } from '@ai-sdk/react';
-import { ToolDetails } from '@/components/tools/tool-details';
-import { FishIcon } from 'lucide-react';
-import { RAGDetails } from '@/components/tools/rag-details';
-import { TextShimmer } from '@/components/ui/text-shimmer';
 
 const PurePreviewMessage = ({
   chatId,
@@ -35,6 +35,7 @@ const PurePreviewMessage = ({
   setMessages,
   reload,
   isReadonly,
+  append,
 }: {
   chatId: string;
   message: UIMessage;
@@ -43,6 +44,7 @@ const PurePreviewMessage = ({
   setMessages: UseChatHelpers['setMessages'];
   reload: UseChatHelpers['reload'];
   isReadonly: boolean;
+  append: UseChatHelpers['append'];
 }) => {
   const [mode, setMode] = useState<'view' | 'edit'>('view');
 

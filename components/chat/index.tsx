@@ -1,24 +1,24 @@
 'use client';
 
-import type { Attachment, UIMessage } from 'ai';
-import { useChat } from '@ai-sdk/react';
-import { useState } from 'react';
-import useSWR, { useSWRConfig } from 'swr';
 import { ChatHeader } from '@/components/chat/chat-header';
-import type { Vote } from '@/server/db/schema';
-import { cn, fetcher, generateUUID } from '@/lib/utils';
-import { Artifact } from '../artifact';
-import { MultimodalInput } from './multimodal-input';
-import { Messages } from './messages';
-import type { VisibilityType } from './visibility-selector';
-import { useArtifactSelector } from '@/hooks/use-artifact';
-import { toast } from 'sonner';
-import { Greeting } from '../greeting';
-import { unstable_serialize } from 'swr/infinite';
 import { getChatHistoryPaginationKey } from '@/components/sidebar/sidebar-history';
-import * as motion from 'motion/react-client';
-import { AnimatePresence } from 'motion/react';
+import { useArtifactSelector } from '@/hooks/use-artifact';
 import type { User } from '@/lib/auth/types';
+import { cn, fetcher, generateUUID } from '@/lib/utils';
+import type { Vote } from '@/server/db/schema';
+import { useChat } from '@ai-sdk/react';
+import type { Attachment, UIMessage } from 'ai';
+import { AnimatePresence } from 'motion/react';
+import * as motion from 'motion/react-client';
+import { useState } from 'react';
+import { toast } from 'sonner';
+import useSWR, { useSWRConfig } from 'swr';
+import { unstable_serialize } from 'swr/infinite';
+import { Artifact } from '../artifact';
+import { Greeting } from '../greeting';
+import { Messages } from './messages';
+import { MultimodalInput } from './multimodal-input';
+import type { VisibilityType } from './visibility-selector';
 
 export function Chat({
   id,
@@ -99,6 +99,7 @@ export function Chat({
                 reload={reload}
                 isReadonly={isReadonly}
                 isArtifactVisible={isArtifactVisible}
+                append={append}
               />
             )}
           </AnimatePresence>

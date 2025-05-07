@@ -1,3 +1,25 @@
+import { systemPrompt } from '@/lib/ai/prompts';
+import { myProvider } from '@/lib/ai/providers';
+import { createDocument } from '@/lib/ai/tools/create-document';
+import { getInformation } from '@/lib/ai/tools/get-information';
+import { getWeather } from '@/lib/ai/tools/get-weather';
+import { getMCPTools } from '@/lib/ai/tools/mcp';
+import { requestSuggestions } from '@/lib/ai/tools/request-suggestions';
+import { updateDocument } from '@/lib/ai/tools/update-document';
+import { getAuthSession } from '@/lib/auth/session';
+import { isProductionEnvironment } from '@/lib/constants';
+import {
+  generateUUID,
+  getMostRecentUserMessage,
+  getTrailingMessageId,
+} from '@/lib/utils';
+import {
+  deleteChatById,
+  getChatById,
+  saveChat,
+  saveMessages,
+} from '@/server/db/queries';
+import * as meetingBaas from '@/server/meetingbaas';
 import {
   type UIMessage,
   appendResponseMessages,
@@ -5,29 +27,7 @@ import {
   smoothStream,
   streamText,
 } from 'ai';
-import { getAuthSession } from '@/lib/auth/session';
-import { systemPrompt } from '@/lib/ai/prompts';
-import {
-  deleteChatById,
-  getChatById,
-  saveChat,
-  saveMessages,
-} from '@/server/db/queries';
-import {
-  generateUUID,
-  getMostRecentUserMessage,
-  getTrailingMessageId,
-} from '@/lib/utils';
 import { generateTitleFromUserMessage } from '../../actions';
-import { createDocument } from '@/lib/ai/tools/create-document';
-import { updateDocument } from '@/lib/ai/tools/update-document';
-import { requestSuggestions } from '@/lib/ai/tools/request-suggestions';
-import { getWeather } from '@/lib/ai/tools/get-weather';
-import { isProductionEnvironment } from '@/lib/constants';
-import { myProvider } from '@/lib/ai/providers';
-import * as meetingBaas from '@/server/meetingbaas';
-import { getMCPTools } from '@/lib/ai/tools/mcp';
-import { getInformation } from '@/lib/ai/tools/get-information';
 
 export const maxDuration = 60;
 

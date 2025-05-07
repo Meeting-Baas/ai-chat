@@ -1,32 +1,32 @@
+import { codeArtifact } from '@/artifacts/code/client';
+import { imageArtifact } from '@/artifacts/image/client';
+import { sheetArtifact } from '@/artifacts/sheet/client';
+import { textArtifact } from '@/artifacts/text/client';
+import { useArtifact } from '@/hooks/use-artifact';
+import { fetcher } from '@/lib/utils';
+import type { Document, Vote } from '@/server/db/schema';
+import type { UseChatHelpers } from '@ai-sdk/react';
 import type { Attachment, UIMessage } from 'ai';
 import { formatDistance } from 'date-fns';
+import equal from 'fast-deep-equal';
 import { AnimatePresence, motion } from 'motion/react';
 import {
-  type Dispatch,
-  memo,
-  type SetStateAction,
-  useCallback,
-  useEffect,
-  useState,
+    type Dispatch,
+    memo,
+    type SetStateAction,
+    useCallback,
+    useEffect,
+    useState,
 } from 'react';
 import useSWR, { useSWRConfig } from 'swr';
 import { useDebounceCallback, useWindowSize } from 'usehooks-ts';
-import type { Document, Vote } from '@/server/db/schema';
-import { fetcher } from '@/lib/utils';
 import { MultimodalInput } from '../chat/multimodal-input';
-import { Toolbar } from './document/toolbar';
-import { VersionFooter } from './document/version-footer';
+import { useSidebar } from '../ui/sidebar';
 import { ArtifactActions } from './artifact-actions';
 import { ArtifactCloseButton } from './artifact-close-button';
 import { ArtifactMessages } from './artifact-messages';
-import { useSidebar } from '../ui/sidebar';
-import { useArtifact } from '@/hooks/use-artifact';
-import { imageArtifact } from '@/artifacts/image/client';
-import { codeArtifact } from '@/artifacts/code/client';
-import { sheetArtifact } from '@/artifacts/sheet/client';
-import { textArtifact } from '@/artifacts/text/client';
-import equal from 'fast-deep-equal';
-import type { UseChatHelpers } from '@ai-sdk/react';
+import { Toolbar } from './document/toolbar';
+import { VersionFooter } from './document/version-footer';
 
 export const artifactDefinitions = [
   textArtifact,
@@ -319,6 +319,7 @@ function PureArtifact({
                   reload={reload}
                   isReadonly={isReadonly}
                   artifactStatus={artifact.status}
+                  append={append}
                 />
 
                 <form className="flex flex-row gap-2 relative items-end w-full px-4 pb-4">
