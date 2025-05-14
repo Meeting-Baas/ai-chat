@@ -46,10 +46,11 @@ This enhanced version of the Chat SDK template includes several key upgrades to 
   - Optionally disable auth for local development (useful when authentication app is on a different domain)
 - Redesigned Login & Register Pages
   - Modern, user-friendly layouts with improved UX and input validation
-- Home Page Makeover  
+- Home Page Makeover
   - Cleaner interface and layout for the chatbot landing page
 - Web Search Integration
   - Responses enriched via **OpenAI's Responses API**, adding contextual and real-time info
+
 
 ## Model Providers
 
