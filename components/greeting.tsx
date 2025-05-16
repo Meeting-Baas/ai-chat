@@ -1,4 +1,4 @@
-import { BotIcon } from 'lucide-react';
+import { FishIcon } from 'lucide-react';
 import { motion } from 'motion/react';
 
 export const Greeting = () => {
@@ -17,7 +17,7 @@ export const Greeting = () => {
         layout="position"
         className="inline-flex gap-2 items-center text-2xl md:text-3xl lg:text-4xl font-medium"
       >
-        <BotIcon
+        <FishIcon
           className="inline-block h-full size-6 md:size-8 lg:size-9 hover:scale-125 transition-transform"
           fill="hsl(var(--accent))"
         />
