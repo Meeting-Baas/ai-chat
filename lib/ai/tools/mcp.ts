@@ -6,6 +6,7 @@ type MCPClientType = Awaited<ReturnType<typeof createMCPClient>>;
 let publicClient: MCPClientType | null = null;
 let privateClient: MCPClientType | null = null;
 let speakingClient: MCPClientType | null = null;
+let docsClient: MCPClientType | null = null;
 
 const environment = process.env.ENVIRONMENT || '';
 // Add a dot for proper subdomain formatting if environment is not empty
@@ -19,6 +20,7 @@ export async function getMCPTools() {
       publicTools: {},
       privateTools: {},
       speakingTools: {},
+      docsTools: {},
       allTools: {},
     };
   }
@@ -26,6 +28,7 @@ export async function getMCPTools() {
   let publicTools = {};
   let privateTools = {};
   let speakingTools = {};
+  let docsTools = {};
 
   try {
     if (!privateClient) {
@@ -102,11 +105,34 @@ export async function getMCPTools() {
     speakingClient = null;
   }
 
+  try {
+    if (!docsClient) {
+      docsClient = await createMCPClient({
+        transport: {
+          type: 'sse',
+          url: 'https://mcp-documentation.meetingbaas.com/sse',
+        },
+        onUncaughtError: (error) => {
+          console.error('Docs MCP Client error:', error);
+          docsClient = null;
+        },
+      });
+    }
+
+    if (docsClient) {
+      docsTools = await docsClient.tools();
+    }
+  } catch (error) {
+    console.error('Failed to connect to docs MCP endpoint:', error);
+    docsClient = null;
+  }
+
   return {
     publicTools,
     privateTools,
     speakingTools,
-    allTools: { ...publicTools, ...privateTools, ...speakingTools },
+    docsTools,
+    allTools: { ...publicTools, ...privateTools, ...speakingTools, ...docsTools },
   };
 }
 
@@ -122,5 +148,9 @@ export async function closeMCPClients() {
   if (speakingClient) {
     await speakingClient.close();
     speakingClient = null;
+  }
+  if (docsClient) {
+    await docsClient.close();
+    docsClient = null;
   }
 }
